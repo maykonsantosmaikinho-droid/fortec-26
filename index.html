@@ -14080,14 +14080,24 @@ function checkAdminAuth(){
   }
 }
 
+function updateAiVisibility(){
+  const fab = document.getElementById('aiFab');
+  const widget = document.getElementById('aiWidget');
+  const show = state.role === 'admin';
+  if(fab) fab.classList.toggle('hidden', !show);
+  if(widget && !show) widget.classList.add('hidden');
+}
+
 function setRole(role){
   if(role === 'admin' && !checkAdminAuth()) return;
   state.role=role;
   document.getElementById('roleGate').classList.toggle('hidden', role!==null);
   document.getElementById('app').classList.toggle('hidden', role===null);
+  updateAiVisibility();
   render();
 }
 function render(){
+  updateAiVisibility();
   if(state.role==='admin') renderAdmin();
   else if(state.role==='teacher') renderTeacherSelf();
 }
