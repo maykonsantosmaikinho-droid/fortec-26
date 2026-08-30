@@ -1536,24 +1536,20 @@ function pickTeacherSelf(id){ state.teacherSelfId=id||null; render(); }
 <div id="aiWidget" class="ai-widget hidden no-print">
   <div class="ai-header">
     <div class="ai-header-title">✨ Assistente IA FORTEC <span id="aiStatus" style="font-size:10px;font-weight:400;color:#aaa;margin-left:6px"></span></div>
-    <div style="display:flex;gap:6px;align-items:center">
-      <button class="ai-close-btn" title="Configurar chave Gemini" onclick="toggleAiConfig()" style="font-size:14px">⚙️</button>
-      <button class="ai-close-btn" onclick="toggleAiWidget()">✕</button>
-    </div>
+    <button class="ai-close-btn" onclick="toggleAiWidget()">✕</button>
   </div>
-  <div id="aiConfigPanel" style="display:none;background:#0f1828;padding:10px 12px;border-bottom:1px solid rgba(221,154,43,0.2)">
-    <div style="font-size:11px;color:#aaa;margin-bottom:6px">🔑 Chave API Google Gemini (salva só no seu navegador):</div>
+  <div id="aiConfigPanel" style="background:#0f1828;padding:10px 12px;border-bottom:1px solid rgba(221,154,43,0.3)">
+    <div style="font-size:11px;color:#dd9a2b;margin-bottom:6px;font-weight:600">🔑 Cole sua chave Google Gemini para ativar a IA:</div>
     <div style="display:flex;gap:6px">
-      <input type="password" id="aiKeyInput" class="ai-input" style="flex:1;font-size:11px" placeholder="Cole sua chave aqui...">
-      <button class="ai-send-btn" onclick="saveAiKey()" style="font-size:11px;white-space:nowrap">Salvar</button>
+      <input type="text" id="aiKeyInput" class="ai-input" style="flex:1;font-size:11px" placeholder="AIzaSy...">
+      <button class="ai-send-btn" onclick="saveAiKey()" style="font-size:11px;white-space:nowrap;padding:0 10px">✓ Salvar</button>
     </div>
-    <div style="font-size:10px;color:#666;margin-top:4px">Obtenha grátis em: aistudio.google.com/apikey</div>
+    <div style="font-size:10px;color:#666;margin-top:4px">Chave gratuita: <b style="color:#aaa">aistudio.google.com/apikey</b> — fica só no seu navegador</div>
   </div>
   <div class="ai-messages" id="aiMessages">
-    <div class="ai-msg bot">
+    <div class="ai-msg bot" id="aiWelcomeMsg">
       Olá! Sou o Assistente IA FORTEC com <b>Gemini</b> integrado. 🤖<br><br>
-      Posso entender qualquer pedido em português e executar ações reais no sistema!<br><br>
-      <span id="aiKeyHint" style="color:#dd9a2b">⚙️ Para ativar a IA completa, clique no ícone de configuração acima e cole sua chave Gemini.</span>
+      Cole sua chave acima para ativar o Gemini real e me perguntar <b>qualquer coisa</b> sobre o horário!
     </div>
   </div>
   <div class="ai-chips" id="aiChips">
@@ -1586,17 +1582,18 @@ function saveAiKey(){
 
 function updateAiStatus(){
   const el = document.getElementById('aiStatus');
+  const panel = document.getElementById('aiConfigPanel');
   const hint = document.getElementById('aiKeyHint');
-  if(el){
-    if(getAiKey()){
-      el.textContent = '● Gemini ativo';
-      el.style.color = '#4ade80';
-    } else {
-      el.textContent = '● modo básico';
-      el.style.color = '#f59e0b';
-    }
+  if(getAiKey()){
+    if(el){ el.textContent = '● Gemini ativo'; el.style.color = '#4ade80'; }
+    // Esconde painel de configuração quando já tem chave
+    if(panel) panel.style.display = 'none';
+    if(hint) hint.style.display = 'none';
+  } else {
+    if(el){ el.textContent = '● configure a chave'; el.style.color = '#f59e0b'; }
+    // Mostra painel de configuração quando não tem chave
+    if(panel) panel.style.display = 'block';
   }
-  if(hint) hint.style.display = getAiKey() ? 'none' : '';
 }
 
 function toggleAiConfig(){
