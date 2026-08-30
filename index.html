@@ -15521,9 +15521,6 @@ function loadFor(req, classId){
 }
 
 function computeDayShapes(){
-  // classId -> day -> {start, load} | null (turma sem aula naquele dia)
-  // Regra: nenhum dia ativo pode ter menos de 5 aulas (Fundamental e Médio), e
-  // ninguém começa depois da 2ª aula (exceção só permitida na 2ª, nunca 3ª+).
   const MIN_DAY_LOAD = 5;
   const shapes={};
   db.classes.forEach(cls=>{
@@ -15532,12 +15529,13 @@ function computeDayShapes(){
     let total = Math.min(totalWeeklyLoad(cls.id), segLen*5);
     const fullDays = Math.floor(total/segLen);
     const remainder = total - fullDays*segLen;
+    const isCmr = cls.name && cls.name.toUpperCase().includes('CMR');
     DAYS.forEach((day,i)=>{
       if(i<fullDays){ shapes[cls.id][day] = {start:0, load:segLen}; }
       else if(i===fullDays && remainder>0){
-        if(remainder>=MIN_DAY_LOAD){ shapes[cls.id][day] = {start:0, load:remainder}; }
-        else if(remainder>=MIN_DAY_LOAD-1){ shapes[cls.id][day] = {start:1, load:remainder}; } // exceção: entra na 2ª aula
-        else { shapes[cls.id][day] = {start:0, load:remainder}; } // carga curta demais para bater o mínimo — violação honesta na auditoria
+        // Apenas turmas de CMR podem ter exceção de entrada na 2ª aula (start: 1) quando for estritamente necessário
+        if(isCmr && remainder===4){ shapes[cls.id][day] = {start:1, load:remainder}; }
+        else { shapes[cls.id][day] = {start:0, load:remainder}; }
       } else { shapes[cls.id][day]=null; }
     });
   });
@@ -15780,11 +15778,16 @@ function auditSchedule(lessons){
       for(let i=first;i<=last;i++){
         if(!idxs.includes(i)){ hardViolations.push(`${cls.name} tem janela em ${DAY_LABELS[day]} (período ${i+1} vazio entre aulas)`); break; }
       }
-      if(seg==='F' && first!==0) hardViolations.push(`${cls.name} (Fundamental) não começa na 1ª aula em ${DAY_LABELS[day]}`);
-      if(seg==='M'){
-        if(first>1) hardViolations.push(`${cls.name} (Médio) começa depois da 2ª aula em ${DAY_LABELS[day]}`);
-        if(first===1) softScore+=500;
-        if(last<MEDIO_MIN_END_IDX) hardViolations.push(`${cls.name} (Médio) sai antes de 11:55 em ${DAY_LABELS[day]} (última aula: ${SEGS.M.periods[last].end})`);
+      const isCmr = cls.name && cls.name.toUpperCase().includes('CMR');
+      if(!isCmr && first!==0){
+        hardViolations.push(`${cls.name} não pode começar na ${first+1}ª aula em ${DAY_LABELS[day]} (somente turmas de CMR podem ter entrada na 2ª aula)`);
+      } else if(isCmr && first>1){
+        hardViolations.push(`${cls.name} (CMR) começa depois da 2ª aula em ${DAY_LABELS[day]}`);
+      }
+      if(isCmr && first===1) softScore+=500;
+
+      if(seg==='M' && last<MEDIO_MIN_END_IDX){
+        hardViolations.push(`${cls.name} (Médio) sai antes de 11:55 em ${DAY_LABELS[day]} (última aula: ${SEGS.M.periods[last].end})`);
       }
     });
   });
