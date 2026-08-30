@@ -1575,13 +1575,15 @@ function downloadText(filename, content, mime){
 }
 
 /* ---- ÁREA DO PROFESSOR ---- */
+/* ---- ÁREA DO PROFESSOR ---- */
 function renderTeacherSelf(){
   document.getElementById('navTabs').innerHTML='';
   const main=document.getElementById('main');
   if(!state.teacherSelfId){
     main.innerHTML = `<div class="card">
-      <span class="label">Professor</span>
-      <select class="input" onchange="pickTeacherSelf(this.value)">
+      <h3 style="margin-top:0">🚪 Portal do Professor</h3>
+      <p class="muted">Selecione seu nome abaixo para preencher sua agenda de disponibilidade semanal:</p>
+      <select class="input" style="font-size:14px;padding:10px" onchange="pickTeacherSelf(this.value)">
         <option value="">Escolha seu nome…</option>
         ${db.teachers.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
       </select>
@@ -1590,18 +1592,51 @@ function renderTeacherSelf(){
     return;
   }
   const t = db.teachers.find(x=>x.id===state.teacherSelfId);
-  const reqs = requirementsForTeacher(t.id);
-  main.innerHTML = `<div class="card"><div class="spaced"><h3 style="margin:0">${t.name}</h3>
-    <button class="smallbtn" style="color:var(--navy);border-color:var(--line)" onclick="state.teacherSelfId=null;render()">trocar</button></div></div>
-    ${reqs.length===0? '<p class="muted">Nenhuma disciplina vinculada a você ainda — peça para a escola cadastrar.</p>' :
-      reqs.map(r=>`<div class="card">
-        <b>${r.subjectId?subjectName(r.subjectId):'(disciplina não definida)'}</b>
-        <div class="muted">${r.classIds.map(className).join(', ')||'sem turmas'} · ${SEGS[r.segment].label}</div>
+  const reqs = db.requirements.filter(r => r.teacherId === t.id);
+  main.innerHTML = `<div class="card" style="border-left:4px solid var(--amber)">
+    <div class="spaced">
+      <div>
+        <h2 style="margin:0">📅 Agenda de Disponibilidade: ${t.name}</h2>
+        <p class="muted" style="margin:4px 0 0">Toque nos horários abaixo para marcar onde você PODE dar aula. O sistema salva na hora para a escola!</p>
+      </div>
+      <button class="btn light sm" onclick="state.teacherSelfId=null;render()">Trocar professor</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <span class="label" style="margin:0;align-self:center">Ações rápidas:</span>
+      <button class="btn sm light" onclick="quickSetAvail('${t.id}', 'all')">⚡ Semana toda livre</button>
+      <button class="btn sm light" onclick="quickSetAvail('${t.id}', 'morning')">🌅 Só até a 5ª aula (11:55)</button>
+      <button class="btn sm light" onclick="quickSetAvail('${t.id}', 'clear')">🧹 Limpar tudo</button>
+    </div>
+
+    ${reqs.length===0? '<p class="muted">Nenhuma disciplina vinculada a você ainda — peça para a coordenação cadastrar suas matérias.</p>' :
+      reqs.map(r=>`<div style="margin-bottom:18px;border-top:1px solid var(--line);padding-top:12px">
+        <div style="font-weight:700;font-size:14px">${r.subjectId?subjectName(r.subjectId):'(disciplina)'}</div>
+        <div class="muted" style="font-size:12px;margin-bottom:6px">${r.classIds.map(className).join(', ')||'sem turmas'} · ${SEGS[r.segment].label}</div>
         ${renderAvailGrid(r)}
       </div>`).join('')}
-    ${reqs.length? `<div class="ok"><span>✓ Disponibilidade salva automaticamente</span></div>`:''}`;
+  </div>
+  ${reqs.length? `<div class="ok" style="margin-top:12px"><span>✓ Disponibilidade salva e sincronizada com o gerador da escola automaticamente!</span></div>`:''}`;
 }
 function pickTeacherSelf(id){ state.teacherSelfId=id||null; render(); }
+
+function quickSetAvail(teacherId, type){
+  const reqs = db.requirements.filter(r => r.teacherId === teacherId);
+  reqs.forEach(r => {
+    if(type==='all'){
+      r.availability = DAYS.map(d=>({day:d, periods:[0,1,2,3,4,5,6]}));
+    } else if(type==='morning'){
+      r.availability = DAYS.map(d=>({day:d, periods:[0,1,2,3,4]}));
+    } else if(type==='clear'){
+      r.availability = [];
+    }
+    r._availabilitySource='confirmada';
+  });
+  scheduleSave();
+  render();
+}
 
 /* ---------------- init ---------------- */
 (async function init(){
