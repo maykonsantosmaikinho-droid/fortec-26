@@ -339,7 +339,73 @@ let db = {"schemaVersion": 1, "classes": [{"id": "cls_csflnjz", "name": "6º ANO
 const EMBEDDED_DB = JSON.parse(JSON.stringify(db)); // cópia congelada dos dados originais do arquivo, usada por "Recarregar do arquivo"
 let state = { role:null, adminTab:'professores', teacherId:null, teacherSelfId:null, scheduleView:'geral', scheduleFilter:null };
 
-/* ---------------- persistência ---------------- */
+/* ---------------- persistência & Nuvem ---------------- */
+let cloudSyncId = (typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('fortec-cloud-id') : '') || '';
+
+// Detecta ?cloud=... na URL
+if (typeof window !== 'undefined' && window.location && window.location.search) {
+  const params = new URLSearchParams(window.location.search);
+  const c = params.get('cloud');
+  if (c) {
+    cloudSyncId = c.trim();
+    if(window.localStorage) window.localStorage.setItem('fortec-cloud-id', cloudSyncId);
+  }
+}
+
+async function syncCloudPush() {
+  if (!cloudSyncId) return;
+  try {
+    showSaveIndicator('☁️ salvando na nuvem…');
+    await fetch('https://api.restful-api.dev/objects/' + cloudSyncId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'fortec-db', data: db })
+    });
+    showSaveIndicator('☁️ ✓ salvo na nuvem');
+  } catch (e) {
+    console.warn('Falha no salvamento em nuvem:', e);
+  }
+}
+
+async function syncCloudPull() {
+  if (!cloudSyncId) return false;
+  try {
+    showSaveIndicator('☁️ sincronizando da nuvem…');
+    const r = await fetch('https://api.restful-api.dev/objects/' + cloudSyncId);
+    if (!r.ok) return false;
+    const json = await r.json();
+    if (json && json.data) {
+      db = json.data;
+      showSaveIndicator('☁️ ✓ sincronizado');
+      return true;
+    }
+  } catch (e) {
+    console.warn('Falha ao baixar da nuvem:', e);
+  }
+  return false;
+}
+
+async function createCloudSync() {
+  try {
+    showSaveIndicator('☁️ criando nuvem da escola…');
+    const r = await fetch('https://api.restful-api.dev/objects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'fortec-db', data: db })
+    });
+    const res = await r.json();
+    if (res && res.id) {
+      cloudSyncId = res.id;
+      if(window.localStorage) window.localStorage.setItem('fortec-cloud-id', cloudSyncId);
+      showSaveIndicator('☁️ ✓ Nuvem criada!');
+      render();
+      alert('✅ Banco em nuvem criado com sucesso!\n\nID da Nuvem: ' + cloudSyncId + '\n\nO link para enviar aos professores foi gerado com sucesso na aba Backup.');
+    }
+  } catch (e) {
+    alert('Erro ao criar banco em nuvem: ' + e.message);
+  }
+}
+
 let saveTimer=null;
 function scheduleSave(){
   clearTimeout(saveTimer);
@@ -354,6 +420,7 @@ async function persist(){
       window.localStorage.setItem('fortec-db-v2', JSON.stringify(db));
     }
     showSaveIndicator('✓ salvo');
+    if (cloudSyncId) { syncCloudPush(); }
   }catch(e){
     console.warn('Salvo localmente:', e);
     showSaveIndicator('✓ salvo');
@@ -361,20 +428,27 @@ async function persist(){
 }
 function showSaveIndicator(text){
   const el=document.getElementById('saveIndicator');
+  if(!el) return;
   el.textContent=text; el.classList.add('show');
   clearTimeout(el._t);
   el._t=setTimeout(()=>el.classList.remove('show'),1600);
 }
 async function loadDb(){
-  try{
-    if(typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function'){
-      const res = await window.storage.get('fortec-db-v2', true);
-      if(res && res.value){ db = JSON.parse(res.value); }
-    } else if(typeof window !== 'undefined' && window.localStorage){
-      const val = window.localStorage.getItem('fortec-db-v2');
-      if(val){ db = JSON.parse(val); }
-    }
-  }catch(e){ /* usa db padrão pré-carregado */ }
+  let loadedFromCloud = false;
+  if (cloudSyncId) {
+    loadedFromCloud = await syncCloudPull();
+  }
+  if (!loadedFromCloud) {
+    try{
+      if(typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function'){
+        const res = await window.storage.get('fortec-db-v2', true);
+        if(res && res.value){ db = JSON.parse(res.value); }
+      } else if(typeof window !== 'undefined' && window.localStorage){
+        const val = window.localStorage.getItem('fortec-db-v2');
+        if(val){ db = JSON.parse(val); }
+      }
+    }catch(e){ /* usa db padrão pré-carregado */ }
+  }
 }
 
 /* ---------------- helpers de domínio ---------------- */
@@ -1375,8 +1449,40 @@ function renderAuditoria(){
 function reaudit(){ db.schedule.audit = auditSchedule(db.schedule.lessons); render(); }
 
 function renderBackup(){
-  return `<div class="card">
-    <h3 style="margin-top:0">Backup</h3>
+  const siteUrl = (typeof window !== 'undefined' && window.location) ? (window.location.origin + window.location.pathname) : 'https://maykonsantosmaikinho-droid.github.io/fortec-26/';
+  const teacherShareUrl = cloudSyncId ? `${siteUrl}?cloud=${cloudSyncId}` : '';
+
+  return `<div class="card" style="border-left:4px solid #4ade80">
+    <h3 style="margin-top:0;display:flex;align-items:center;gap:6px">☁️ Sincronização em Nuvem em Tempo Real</h3>
+    <p class="muted" style="margin:4px 0 12px">Permite que os professores preencham a disponibilidade nos seus celulares de casa e o computador da escola receba na hora!</p>
+    
+    ${cloudSyncId ? `
+      <div class="ok" style="margin-bottom:12px;background:#152e22;border-color:#4ade80;color:#4ade80">
+        <b>🟢 Nuvem Conectada!</b><br>
+        ID da Nuvem: <code class="mono" style="background:#0f1828;padding:2px 6px;border-radius:4px">${cloudSyncId}</code>
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn amber sm" style="font-weight:700" onclick="copyTeacherLink('${teacherShareUrl}')">📱 Copiar Link do WhatsApp para os Professores</button>
+        <button class="btn light sm" onclick="syncCloudPull().then(()=>render())">🔄 Sincronizar Agora</button>
+        <button class="btn danger sm" onclick="disconnectCloud()">🔴 Desconectar</button>
+      </div>
+    ` : `
+      <p class="muted" style="margin-bottom:10px">Sua escola ainda não possui uma nuvem conectada.</p>
+      <div class="row" style="gap:8px">
+        <button class="btn amber block" style="flex:1;font-weight:700;padding:10px" onclick="createCloudSync()">⚡ Criar Banco em Nuvem Gratuito (1 clique)</button>
+      </div>
+      <div style="margin-top:14px">
+        <span class="label">Ou conecte a um ID de Nuvem existente:</span>
+        <div class="row">
+          <input class="input" id="connectCloudId" placeholder="Cole o ID da nuvem da escola aqui…" style="flex:1">
+          <button class="btn light sm" onclick="connectCloud(document.getElementById('connectCloudId').value)">Conectar</button>
+        </div>
+      </div>
+    `}
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Backup Local (Arquivo JSON)</h3>
     <button class="btn amber block" onclick="exportBackup()">⬇ Exportar backup (JSON)</button>
     <div class="divider"></div>
     <span class="label">Importar backup</span>
@@ -1390,6 +1496,34 @@ function renderBackup(){
     <p class="muted">Se o app parecer "travado" numa versão antiga depois que eu te mandar um arquivo novo, use isto para descartar o que está salvo e usar os dados que vieram junto com este HTML.</p>
     <button class="btn light block" onclick="reloadEmbedded()">Recarregar do arquivo</button>
   </div>`;
+}
+
+function copyTeacherLink(url){
+  if(!url) return;
+  const msg = `Olá professor(a)! Acesse o link abaixo no seu celular para preencher sua disponibilidade semanal:\n\n${url}`;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(msg).then(()=>{
+      alert('✅ Link copiado para a área de transferência!\n\nVocê já pode colar no grupo de WhatsApp dos professores.');
+    }).catch(()=>{
+      prompt('Copie o link abaixo para mandar aos professores no WhatsApp:', msg);
+    });
+  } else {
+    prompt('Copie o link abaixo para mandar aos professores no WhatsApp:', msg);
+  }
+}
+
+function connectCloud(id){
+  if(!id || !id.trim()) return;
+  cloudSyncId = id.trim();
+  if(window.localStorage) window.localStorage.setItem('fortec-cloud-id', cloudSyncId);
+  syncCloudPull().then(()=>render());
+}
+
+function disconnectCloud(){
+  if(!confirm('Desconectar a nuvem da escola neste aparelho?')) return;
+  cloudSyncId = '';
+  if(window.localStorage) window.localStorage.removeItem('fortec-cloud-id');
+  render();
 }
 function reloadEmbedded(){
   if(!confirm('Isso descarta qualquer alteração feita depois que este arquivo foi aberto e volta para os dados originais do arquivo. Confirma?')) return;
