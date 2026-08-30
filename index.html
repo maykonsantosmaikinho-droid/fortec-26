@@ -6268,7 +6268,7 @@ let db = {
       {
         "id": "lsn_3898572",
         "day": "SEG",
-        "period": 0,
+        "period": 5,
         "segment": "F",
         "teacherId": "tch_74af3ce",
         "subjectId": "subj_276ebb9",
@@ -6520,7 +6520,7 @@ let db = {
       {
         "id": "lsn_d290622",
         "day": "SEG",
-        "period": 1,
+        "period": 6,
         "segment": "F",
         "teacherId": "tch_74af3ce",
         "subjectId": "subj_5a41e44",
@@ -7408,7 +7408,7 @@ let db = {
       {
         "id": "lsn_e35f1f2",
         "day": "SEG",
-        "period": 3,
+        "period": 6,
         "segment": "M",
         "teacherId": "tch_d945d39",
         "subjectId": "subj_0469115",
@@ -7815,8 +7815,8 @@ let db = {
       },
       {
         "id": "lsn_731ba37",
-        "day": "SEG",
-        "period": 4,
+        "day": "TER",
+        "period": 6,
         "segment": "M",
         "teacherId": "tch_74af3ce",
         "subjectId": "subj_5a41e44",
@@ -7827,8 +7827,8 @@ let db = {
       },
       {
         "id": "lsn_61d6012",
-        "day": "SEG",
-        "period": 4,
+        "day": "QUA",
+        "period": 0,
         "segment": "M",
         "teacherId": "tch_74af3ce",
         "subjectId": "subj_5a41e44",
@@ -8104,7 +8104,7 @@ let db = {
       {
         "id": "lsn_c3d427f",
         "day": "TER",
-        "period": 0,
+        "period": 5,
         "segment": "F",
         "teacherId": "tch_74af3ce",
         "subjectId": "subj_276ebb9",
@@ -8583,8 +8583,8 @@ let db = {
       },
       {
         "id": "lsn_1a89d16",
-        "day": "TER",
-        "period": 1,
+        "day": "QUA",
+        "period": 6,
         "segment": "M",
         "teacherId": "tch_74af3ce",
         "subjectId": "subj_5a41e44",
@@ -8595,8 +8595,8 @@ let db = {
       },
       {
         "id": "lsn_09bfe5f",
-        "day": "TER",
-        "period": 1,
+        "day": "QUI",
+        "period": 0,
         "segment": "M",
         "teacherId": "tch_74af3ce",
         "subjectId": "subj_5a41e44",
@@ -8943,8 +8943,8 @@ let db = {
       },
       {
         "id": "lsn_0952144",
-        "day": "TER",
-        "period": 2,
+        "day": "QUI",
+        "period": 6,
         "segment": "M",
         "teacherId": "tch_74af3ce",
         "subjectId": "subj_5a41e44",
@@ -9051,8 +9051,8 @@ let db = {
       },
       {
         "id": "lsn_5511d2e",
-        "day": "TER",
-        "period": 3,
+        "day": "QUA",
+        "period": 5,
         "segment": "F",
         "teacherId": "tch_74af3ce",
         "subjectId": "subj_276ebb9",
@@ -9375,8 +9375,8 @@ let db = {
       },
       {
         "id": "lsn_d12102a",
-        "day": "TER",
-        "period": 4,
+        "day": "QUI",
+        "period": 5,
         "segment": "F",
         "teacherId": "tch_74af3ce",
         "subjectId": "subj_5a41e44",
@@ -9556,7 +9556,7 @@ let db = {
       {
         "id": "lsn_1526a92",
         "day": "TER",
-        "period": 4,
+        "period": 0,
         "segment": "M",
         "teacherId": "tch_d945d39",
         "subjectId": "subj_8e1f21c",
@@ -12579,8 +12579,8 @@ let db = {
       },
       {
         "id": "lsn_f581e30",
-        "day": "QUI",
-        "period": 2,
+        "day": "SEG",
+        "period": 6,
         "segment": "M",
         "teacherId": "tch_df5ccb2",
         "subjectId": "subj_b92d494",
@@ -12855,8 +12855,8 @@ let db = {
       },
       {
         "id": "lsn_edfe554",
-        "day": "QUI",
-        "period": 3,
+        "day": "SEG",
+        "period": 6,
         "segment": "M",
         "teacherId": "tch_f67d33b",
         "subjectId": "subj_3a62ba8",
@@ -13431,8 +13431,8 @@ let db = {
       },
       {
         "id": "lsn_df43340",
-        "day": "QUI",
-        "period": 5,
+        "day": "TER",
+        "period": 6,
         "segment": "M",
         "teacherId": "tch_f67d33b",
         "subjectId": "subj_3a62ba8",
@@ -15326,7 +15326,7 @@ let db = {
         "requirementId": "req_f10087b"
       }
     ],
-    "generatedAt": "2026-08-17T08:00:00.000Z",
+    "generatedAt": "2026-08-30T20:50:39.857Z",
     "stale": false,
     "exceptionsUsed": 0,
     "audit": {
@@ -15689,7 +15689,7 @@ function solveBacktrack(units, shapes, opts){
   const result = backtrack();
   if(result!==true && bestSnapshot && bestPlacedCount>0){
     // não fechou 100% — restaura o melhor estado parcial encontrado durante a busca
-    units.forEach(u=>u._placed=null);
+units.forEach(u=>u._placed=null);
     const byId={}; units.forEach(u=>byId[u.id]=u);
     bestSnapshot.forEach(s=>{ byId[s.unitId]._placed={day:s.day, realIdx:s.realIdx}; });
   }
@@ -15702,38 +15702,114 @@ function solveBacktrack(units, shapes, opts){
 }
 
 function generateSchedule(){
+  // Estratégia greedy: começa alocando todas as aulas turma a turma,
+  // depois resolve conflitos de professor movendo aulas para slots livres.
+  // Muito mais rápido que backtracking completo para grades grandes.
   const shapes = computeDayShapes();
-  let best=null, bestScore=Infinity;
-  const ATTEMPTS=6;
-  for(let i=0;i<ATTEMPTS;i++){
-    const allUnits = buildNeedUnits();
-    // pré-filtro: remove unidades estruturalmente impossíveis (ex: aula conjunta cujas
-    // turmas não têm nenhum dia/período em comum dado o formato do dia de cada uma) —
-    // sem isso, uma única unidade impossível travaria TODO o backtracking sem colocar nada.
-    const staticImpossible=[];
-    const units = allUnits.filter(u=>{
-      const possible = DAYS.some(day=>{
-        const shapesOfMembers = u.classIds.map(cid=>shapes[cid][day]);
-        if(shapesOfMembers.some(s=>!s)) return false;
-        const realRanges = u.classIds.map(cid=>{ const s=shapes[cid][day]; return [s.start, s.start+s.load-1]; });
-        const lo = Math.max(...realRanges.map(r=>r[0])), hi = Math.min(...realRanges.map(r=>r[1]));
-        if(lo>hi) return false;
-        return u.availability.some(a=>a.day===day && a.periods.some(p=>p>=lo && p<=hi));
-      });
-      if(!possible) staticImpossible.push(u);
-      return possible;
-    });
-    const result = solveBacktrack(units, shapes, {shuffled:i>0, stepLimit:180000});
-    const audit = auditSchedule(result.lessons);
-    staticImpossible.forEach(u=>{
-      audit.deficits.push(`${u.classIds.map(className).join('+')} — ${subjectName(u.subjectId)} — impossível de encaixar (disponibilidade não cobre nenhum período ativo dessa turma)`);
-    });
-    const score = audit.hardViolations.length*100000 + (audit.deficits.length+result.unplaced)*1000 + audit.softScore;
-    if(score<bestScore){ bestScore=score; best={...result, audit}; }
-    if(result.complete && staticImpossible.length===0 && audit.hardViolations.length===0 && audit.deficits.length===0) break;
+  const lessons = [];
+
+  // 1) Aloca todas as necessidades de forma greedy
+  const unitsByTeacher = {};
+  buildNeedUnits().forEach(u=>{
+    if(!unitsByTeacher[u.teacherId]) unitsByTeacher[u.teacherId]=[];
+    unitsByTeacher[u.teacherId].push(u);
+  });
+
+  const classSlots={}; // classId|day|period -> true
+  const teacherSlots={}; // teacherId|day|period -> true
+
+  function slotKey(day,period){ return day+'|'+period; }
+
+  function isSlotFree(classIds, teacherId, day, period){
+    if(teacherSlots[teacherId+'|'+slotKey(day,period)]) return false;
+    return !classIds.some(cid=>classSlots[cid+'|'+slotKey(day,period)]);
   }
-  db.schedule = { lessons:best.lessons, generatedAt:new Date().toISOString(), stale:false,
-    exceptionsUsed:0, audit: best.audit };
+
+  function placeLesson(u, day, period){
+    const l = {id:uid('lsn'), day, period, segment:u.segment,
+      teacherId:u.teacherId, subjectId:u.subjectId, classIds:[...u.classIds], requirementId:u.reqId};
+    lessons.push(l);
+    teacherSlots[u.teacherId+'|'+slotKey(day,period)]=true;
+    u.classIds.forEach(cid=>classSlots[cid+'|'+slotKey(day,period)]=true);
+  }
+
+  // Para cada professor, aloca suas aulas em slots disponíveis
+  Object.values(unitsByTeacher).forEach(units=>{
+    units.forEach(u=>{
+      const seg=u.segment, segLen=SEGS[seg].periods.length;
+      let placed=false;
+      for(const day of DAYS){
+        const shp = u.classIds[0] && shapes[u.classIds[0]] ? shapes[u.classIds[0]][day] : null;
+        if(!shp) continue;
+        for(let p=shp.start; p<shp.start+shp.load; p++){
+          if(!u.availability.some(a=>a.day===day && a.periods.includes(p))) continue;
+          if(!isSlotFree(u.classIds, u.teacherId, day, p)) continue;
+          placeLesson(u, day, p);
+          placed=true;
+          break;
+        }
+        if(placed) break;
+      }
+      if(!placed){
+        // Tenta qualquer slot disponível do professor
+        for(const day of DAYS){
+          const segLen2 = SEGS[u.segment].periods.length;
+          for(let p=0;p<segLen2;p++){
+            if(!u.availability.some(a=>a.day===day && a.periods.includes(p))) continue;
+            if(!isSlotFree(u.classIds, u.teacherId, day, p)) continue;
+            placeLesson(u, day, p);
+            placed=true;
+            break;
+          }
+          if(placed) break;
+        }
+      }
+    });
+  });
+
+  // 2) Resolve conflitos de professor (mesma materia/req = aula conjunta valida, diferente = conflito)
+  let changed=true, iter=0;
+  while(changed && iter<50){
+    changed=false; iter++;
+    const byTeacherSlot={};
+    lessons.forEach(l=>{
+      const key=l.teacherId+'|'+l.day+'|'+l.period;
+      if(!byTeacherSlot[key]) byTeacherSlot[key]=[];
+      byTeacherSlot[key].push(l);
+    });
+    for(const group of Object.values(byTeacherSlot)){
+      if(group.length<2) continue;
+      for(let i=0;i<group.length;i++){
+        for(let j=i+1;j<group.length;j++){
+          if(group[i].subjectId===group[j].subjectId||group[i].requirementId===group[j].requirementId) continue;
+          // Conflito real — move lesson j para slot livre
+          const mov=group[j];
+          const segLen=SEGS[mov.segment].periods.length;
+          let moved=false;
+          for(const day of DAYS){
+            for(let p=0;p<segLen;p++){
+              if(day===mov.day && p===mov.period) continue;
+              const tFree=!lessons.some(l=>l.id!==mov.id && l.teacherId===mov.teacherId && l.day===day && l.period===p && l.subjectId!==mov.subjectId && l.requirementId!==mov.requirementId);
+              const cFree=!mov.classIds.some(cid=>lessons.some(l=>l.id!==mov.id && l.classIds.includes(cid) && l.day===day && l.period===p));
+              if(tFree && cFree){
+                const idx=lessons.findIndex(l=>l.id===mov.id);
+                lessons[idx]={...mov, day, period:p};
+                changed=true; moved=true; break;
+              }
+            }
+            if(moved) break;
+          }
+          if(changed) break;
+        }
+        if(changed) break;
+      }
+      if(changed) break;
+    }
+  }
+
+  const audit = auditSchedule(lessons);
+  db.schedule = { lessons, generatedAt:new Date().toISOString(), stale:false,
+    exceptionsUsed:0, audit };
   scheduleSave();
 }
 
