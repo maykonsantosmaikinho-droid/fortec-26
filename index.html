@@ -794,7 +794,35 @@ function validSlotsFor(need){
 /* ============================================================
    RENDER
    ============================================================ */
+function getAdminPin(){
+  return (typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('fortec-admin-pin') : null) || '1234';
+}
+
+function setAdminPin(newPin){
+  if(!newPin || !newPin.trim()) return;
+  const pin = newPin.trim();
+  if(window.localStorage) window.localStorage.setItem('fortec-admin-pin', pin);
+  if(typeof sessionStorage !== 'undefined') sessionStorage.setItem('fortec-admin-auth', 'true');
+  alert('✅ Senha da escola alterada com sucesso para: ' + pin);
+  render();
+}
+
+function checkAdminAuth(){
+  if(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fortec-admin-auth')==='true') return true;
+  const currentPin = getAdminPin();
+  const inputPin = prompt('🔒 Acesso Restrito da Coordenação (Escola)\n\nDigite a senha da escola para acessar:');
+  if(inputPin === null) return false;
+  if(inputPin.trim() === currentPin){
+    if(typeof sessionStorage !== 'undefined') sessionStorage.setItem('fortec-admin-auth', 'true');
+    return true;
+  } else {
+    alert('❌ Senha incorreta.');
+    return false;
+  }
+}
+
 function setRole(role){
+  if(role === 'admin' && !checkAdminAuth()) return;
   state.role=role;
   document.getElementById('roleGate').classList.toggle('hidden', role!==null);
   document.getElementById('app').classList.toggle('hidden', role===null);
@@ -1480,6 +1508,15 @@ function renderBackup(){
         </div>
       </div>
     `}
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">🔒 Senha de Acesso da Escola</h3>
+    <p class="muted">Defina a senha que protege o acesso a "Sou da escola". (Senha padrão inicial: <b>1234</b>)</p>
+    <div class="row">
+      <input class="input" id="newAdminPinInput" value="${getAdminPin()}" placeholder="Nova senha da escola" style="flex:1">
+      <button class="btn amber sm" onclick="setAdminPin(document.getElementById('newAdminPinInput').value)">✓ Alterar Senha</button>
+    </div>
   </div>
 
   <div class="card">
