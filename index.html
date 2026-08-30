@@ -1800,6 +1800,8 @@ function renderTeacherSelf(){
     </div>`;
     return;
   }
+  const t = db.teachers.find(x=>x.id===state.teacherSelfId);
+  if (!t) return;
   const hasSchedule = db.schedule && db.schedule.lessons && db.schedule.lessons.some(l => l.teacherId === t.id);
 
   let scheduleCard = '';
