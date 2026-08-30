@@ -1759,12 +1759,13 @@ const FORTEC_TOOLS = [{
     { name:'ir_aba', description:'Navega para uma aba: turmas, disciplinas, professores, gerar, horario, auditoria, backup.',
       parameters:{type:'OBJECT', properties:{ aba:{type:'STRING',description:'nome da aba'} }, required:['aba']} },
     { name:'alterar_disponibilidade_professor',
-      description:'Altera os dias de disponibilidade de um professor e recalcula o horário da escola. SEGURANÇA: Passe confirmado=false se o usuário ainda não deu confirmação direta no chat. Passe confirmado=true apenas após confirmação.',
+      description:'Altera a disponibilidade de um professor por dias e/ou por períodos de aulas (ex: "a partir da 3ª aula", "das 09:10 em diante", "só na 1ª e 2ª aula"). SEGURANÇA: Passe confirmado=false se o usuário ainda não confirmou no chat. Passe confirmado=true apenas após confirmação.',
       parameters:{
         type:'OBJECT',
         properties:{
           nome_professor:{type:'STRING',description:'Nome do professor, ex: SIMONI, WILRANI'},
           dias:{type:'ARRAY',items:{type:'STRING'},description:'Dias em que o professor PODE dar aula. Códigos: SEG, TER, QUA, QUI, SEX'},
+          aulas:{type:'ARRAY',items:{type:'NUMBER'},description:'Opcional. Números das aulas permitidas de 1 a 7 (ex: [3,4,5,6,7] para "a partir da 3ª aula" ou [1,2,3] para "da 1ª à 3ª aula"). Se omitido, considera todas as aulas (1 a 7).'},
           confirmado:{type:'BOOLEAN',description:'true se o usuário confirmou a alteração no chat; false se pendente.'}
         },
         required:['nome_professor','dias','confirmado']
@@ -1838,13 +1839,21 @@ function executeTool(name, args){
         return `Nenhum dia válido informado. Os dias permitidos são: SEG, TER, QUA, QUI, SEX.`;
       }
 
-      const diasDesc = chosenDays.map(d => validDaysMap[d]).join(', ');
+      // Converte números de aulas (1 a 7) para índices (0 a 6)
+      let periodIndices = [0, 1, 2, 3, 4, 5, 6];
+      if(Array.isArray(args.aulas) && args.aulas.length > 0){
+        periodIndices = args.aulas.map(a => Number(a)-1).filter(idx => idx >= 0 && idx <= 6);
+        if(periodIndices.length === 0) periodIndices = [0, 1, 2, 3, 4, 5, 6];
+      }
+
+      const periodStr = periodIndices.length === 7 ? '' : ` (aulas ${periodIndices.map(p=>p+1+'ª').join(', ')})`;
+      const diasDesc = chosenDays.map(d => validDaysMap[d]).join(', ') + periodStr;
 
       if(!args.confirmado){
-        return `CONFIRMAÇÃO PENDENTE: A alteração para o(a) professor(a) ${t.name} (novos dias: [${diasDesc}]) AINDA NÃO FOI APLICADA.
+        return `CONFIRMAÇÃO PENDENTE: A alteração para o(a) professor(a) ${t.name} (disponibilidade: [${diasDesc}]) AINDA NÃO FOI APLICADA.
 INSTRUÇÕES OBRIGATÓRIAS PARA O ASSISTENTE IA:
 1. Recomende expressamente que o usuário faça o backup do horário atual por segurança (baixe a planilha Excel ou exporte o backup JSON na aba Backup).
-2. Detalhe os novos dias (${t.name} -> ${diasDesc}).
+2. Detalhe os novos dias e horários (${t.name} -> ${diasDesc}).
 3. Peça a confirmação explícita do usuário no chat antes de aplicar.`;
       }
 
@@ -1854,7 +1863,7 @@ INSTRUÇÕES OBRIGATÓRIAS PARA O ASSISTENTE IA:
         return `O(A) professor(a) ${t.name} existe, mas não possui disciplinas cadastradas para alterar.`;
       }
 
-      const newAvail = chosenDays.map(day => ({ day: day, periods: [0, 1, 2, 3, 4, 5, 6] }));
+      const newAvail = chosenDays.map(day => ({ day: day, periods: [...periodIndices] }));
       reqs.forEach(r => { r.availability = JSON.parse(JSON.stringify(newAvail)); });
 
       scheduleSave();
