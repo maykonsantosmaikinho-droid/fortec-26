@@ -1316,7 +1316,7 @@ function exportExcel(){
     wsAudit['!cols'] = [{ wch: 22 }, { wch: 85 }];
     XLSX.utils.book_append_sheet(wb, wsAudit, 'Auditoria-Conflitos');
 
-    XLSX.writeFile(wb, 'fortec-horario.xlsx');
+    XLSX.writeFile(wb, 'fortec-horario-novo.xlsx');
     showSaveIndicator('✓ Planilha Excel gerada com sucesso!');
   }catch(e){
     console.error('Falha ao exportar Excel:', e);
