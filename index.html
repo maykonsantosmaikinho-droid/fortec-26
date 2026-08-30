@@ -1568,96 +1568,232 @@ function pickTeacherSelf(id){ state.teacherSelfId=id||null; render(); }
   </div>
 </div>
 <script>
-function toggleAiWidget(){
-  const w = document.getElementById('aiWidget');
-  w.classList.toggle('hidden');
-  if(!w.classList.contains('hidden')) {
-    document.getElementById('aiInput').focus();
+// =============================================
+// ASSISTENTE IA FORTEC — GEMINI REAL INTEGRADO
+// =============================================
+let aiHistory = [];
+
+function getAiKey(){ return localStorage.getItem('fortec-gemini-key') || ''; }
+
+function saveAiKey(){
+  const k = document.getElementById('aiKeyInput').value.trim();
+  if(!k){ alert('Cole uma chave válida.'); return; }
+  localStorage.setItem('fortec-gemini-key', k);
+  toggleAiConfig();
+  updateAiStatus();
+  addAiMessage('✅ <b>Chave salva com sucesso!</b> Agora sou o Gemini real. Pode me perguntar qualquer coisa! 🎉');
+}
+
+function updateAiStatus(){
+  const el = document.getElementById('aiStatus');
+  const hint = document.getElementById('aiKeyHint');
+  if(el){
+    if(getAiKey()){
+      el.textContent = '● Gemini ativo';
+      el.style.color = '#4ade80';
+    } else {
+      el.textContent = '● modo básico';
+      el.style.color = '#f59e0b';
+    }
+  }
+  if(hint) hint.style.display = getAiKey() ? 'none' : '';
+}
+
+function toggleAiConfig(){
+  const p = document.getElementById('aiConfigPanel');
+  if(!p) return;
+  const visible = p.style.display !== 'none';
+  p.style.display = visible ? 'none' : 'block';
+  if(!visible){
+    const ki = document.getElementById('aiKeyInput');
+    if(ki){ ki.value = getAiKey(); ki.focus(); }
   }
 }
 
-function addAiMessage(text, isUser=false){
+function toggleAiWidget(){
+  const w = document.getElementById('aiWidget');
+  w.classList.toggle('hidden');
+  if(!w.classList.contains('hidden')){
+    updateAiStatus();
+    const inp = document.getElementById('aiInput');
+    if(inp) inp.focus();
+  }
+}
+
+function addAiMessage(html, isUser=false){
   const box = document.getElementById('aiMessages');
   const msg = document.createElement('div');
   msg.className = 'ai-msg ' + (isUser ? 'user' : 'bot');
-  msg.innerHTML = text;
+  msg.innerHTML = html;
   box.appendChild(msg);
   box.scrollTop = box.scrollHeight;
+  return msg;
 }
 
 function sendAiQuick(text){
-  document.getElementById('aiInput').value = text;
+  const inp = document.getElementById('aiInput');
+  if(inp) inp.value = text;
   sendAiMsg();
 }
 
 function sendAiMsg(){
   const input = document.getElementById('aiInput');
-  const text = input.value.trim();
+  const text = (input ? input.value : '').trim();
   if(!text) return;
-  
   addAiMessage(text, true);
-  input.value = '';
-  
-  setTimeout(() => processAiCommand(text), 200);
+  if(input) input.value = '';
+  if(getAiKey()){
+    callGemini(text);
+  } else {
+    fallbackCmd(text);
+  }
 }
 
-function processAiCommand(text){
-  const lower = text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  
-  // 1. GERAR HORÁRIO
-  if(lower.includes('gerar') || lower.includes('recalcular') || lower.includes('novo horario') || lower.includes('criar horario')){
-    addAiMessage('⚙️ <b>Executando:</b> Gerando o horário inteligente da escola...');
-    runGenerate();
-    setTimeout(() => {
-      addAiMessage('✅ <b>Horário gerado com sucesso!</b> A grade foi atualizada na tela e auditada.');
-    }, 600);
-    return;
-  }
-  
-  // 2. BAIXAR EXCEL
-  if(lower.includes('excel') || lower.includes('planilha') || lower.includes('baixar') || lower.includes('download')){
-    addAiMessage('⬇️ <b>Executando:</b> Gerando planilha Excel estilizada com todas as abas...');
-    exportExcel();
-    addAiMessage('✅ <b>Download iniciado!</b> A planilha <code>fortec-horario-excel.xlsx</code> foi baixada.');
-    return;
-  }
-  
-  // 3. AUDITAR GRADE
-  if(lower.includes('audit') || lower.includes('conflito') || lower.includes('erro') || lower.includes('problema') || lower.includes('verificar')){
-    state.adminTab = 'auditoria';
-    render();
-    const a = db.schedule ? db.schedule.audit : null;
-    if(a && a.ok){
-      addAiMessage('✅ <b>Auditoria Concluída:</b> O horário atual está 100% válido, sem nenhum choque ou janela nas turmas!');
-    } else if(a){
-      addAiMessage(`⚠️ <b>Auditoria Concluída:</b> Foram encontrados ${a.hardViolations.length + a.deficits.length} aviso(s). Exibindo detalhes e sugestões na aba Auditoria.`);
-    } else {
-      addAiMessage('ℹ️ Nenhum horário foi gerado ainda. Clique em ⚡ Gerar horário.');
+// ---- FERRAMENTAS DO FORTEC PARA O GEMINI ----
+const FORTEC_TOOLS = [{
+  functionDeclarations: [
+    { name:'gerar_horario', description:'Gera ou recalcula o horário completo da escola usando backtracking inteligente.', parameters:{type:'OBJECT',properties:{}} },
+    { name:'baixar_excel', description:'Exporta e faz download da planilha Excel com o horário.', parameters:{type:'OBJECT',properties:{}} },
+    { name:'auditar_horario', description:'Audita o horário verificando conflitos, janelas e violações.', parameters:{type:'OBJECT',properties:{}} },
+    { name:'ver_horario_professor', description:'Mostra o horário de um professor na tela.',
+      parameters:{type:'OBJECT', properties:{ nome:{type:'STRING',description:'Nome ou parte do nome do professor'} }, required:['nome']} },
+    { name:'ver_horario_turma', description:'Mostra o horário de uma turma na tela.',
+      parameters:{type:'OBJECT', properties:{ nome:{type:'STRING',description:'Nome da turma, ex: 6º ANO, CMR1A'} }, required:['nome']} },
+    { name:'ver_horario_geral', description:'Mostra a grade geral da escola.', parameters:{type:'OBJECT',properties:{}} },
+    { name:'consultar_dados', description:'Retorna dados reais da escola: professores, turmas, disciplinas, requisitos, estatísticas.', parameters:{type:'OBJECT',properties:{}} },
+    { name:'ir_aba', description:'Navega para uma aba: turmas, disciplinas, professores, gerar, horario, auditoria, backup.',
+      parameters:{type:'OBJECT', properties:{ aba:{type:'STRING',description:'nome da aba'} }, required:['aba']} }
+  ]
+}];
+
+function normStr(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+
+function executeTool(name, args){
+  switch(name){
+    case 'gerar_horario':
+      runGenerate();
+      return 'Horário gerado com sucesso pelo algoritmo de backtracking!';
+    case 'baixar_excel':
+      exportExcel();
+      return 'Download da planilha Excel iniciado!';
+    case 'auditar_horario': {
+      if(typeof reaudit === 'function') reaudit();
+      const a = db.schedule && db.schedule.audit;
+      if(!a) return 'Nenhum horário gerado ainda.';
+      if(a.ok) return 'HORÁRIO VÁLIDO. Sem conflitos ou janelas.';
+      return `${a.hardViolations.length} violações críticas, ${a.deficits.length} avisos.\nViolações: ${a.hardViolations.slice(0,3).join('; ')}\nAvisos: ${a.deficits.slice(0,3).join('; ')}`;
     }
-    return;
+    case 'ver_horario_professor': {
+      const n = normStr(args.nome);
+      const t = db.teachers.find(t => normStr(t.name).includes(n) || n.split(' ').some(w=>w.length>2&&normStr(t.name).includes(w)));
+      if(!t) return `Professor "${args.nome}" não encontrado. Cadastrados: ${db.teachers.map(t=>t.name).join(', ')}`;
+      state.adminTab='horario'; state.scheduleView='professor'; state.scheduleFilter=t.id; render();
+      const aulas = db.schedule ? db.schedule.lessons.filter(l=>l.teacherId===t.id).length : 0;
+      return `Exibindo horário de ${t.name} na tela. Total: ${aulas} aulas/semana.`;
+    }
+    case 'ver_horario_turma': {
+      const n = normStr(args.nome);
+      const c = db.classes.find(c => normStr(c.name).includes(n) || n.includes(normStr(c.name)));
+      if(!c) return `Turma "${args.nome}" não encontrada. Disponíveis: ${db.classes.map(c=>c.name).join(', ')}`;
+      state.adminTab='horario'; state.scheduleView='turma'; state.scheduleFilter=c.id; render();
+      const aulas = db.schedule ? db.schedule.lessons.filter(l=>l.classIds&&l.classIds.includes(c.id)).length : 0;
+      return `Exibindo horário da turma ${c.name}. Total: ${aulas} aulas/semana.`;
+    }
+    case 'ver_horario_geral':
+      state.adminTab='horario'; state.scheduleView='geral'; render();
+      return 'Exibindo grade geral completa.';
+    case 'ir_aba':
+      state.adminTab=args.aba; render();
+      return `Navegado para aba: ${args.aba}`;
+    case 'consultar_dados': {
+      const total = db.requirements.reduce((s,r)=>s+(r.joint?r.lessonsPerWeek:r.lessonsPerWeek*(r.classIds||[]).length),0);
+      const audit = db.schedule&&db.schedule.audit;
+      return JSON.stringify({
+        professores: db.teachers.map(t=>t.name),
+        turmas: db.classes.map(c=>c.name+' ('+( c.segment==='F'?'Fundamental':'Médio')+')'  ),
+        disciplinas: db.subjects.map(s=>s.name),
+        requisitos: db.requirements.length,
+        aulasPorSemana: total,
+        aulasGeradas: db.schedule?db.schedule.lessons.length:0,
+        auditoria: audit?(audit.ok?'VÁLIDO':`${audit.hardViolations.length} violações`):'sem horário'
+      },null,2);
+    }
+    default: return 'ok';
   }
-  
-  // 4. ESTATÍSTICAS
-  if(lower.includes('estatistica') || lower.includes('total') || lower.includes('quantos') || lower.includes('resumo')){
-    const totalWeekly = db.requirements.reduce((s,r)=>s+(r.joint?r.lessonsPerWeek:r.lessonsPerWeek*r.classIds.length),0);
-    addAiMessage(`📊 <b>Estatísticas da Escola:</b><br>
-      • <b>${db.teachers.length}</b> Professores cadastrados<br>
-      • <b>${db.classes.length}</b> Turmas (Fundamental + Médio)<br>
-      • <b>${db.requirements.length}</b> Requisitos de disciplinas<br>
-      • <b>${totalWeekly}</b> Aulas totais por semana`);
-    return;
-  }
-  
-  // RESPOSTA PADRÃO PARA COMANDOS GERAIS OU DÚVIDAS
-  addAiMessage(`Entendi! Você pode me pedir comandos como:<br>
-    • <i>"Gere o horário da escola"</i><br>
-    • <i>"Baixar a planilha Excel"</i><br>
-    • <i>"Auditar conflitos"</i><br>
-    • <i>"Mostrar horário de [Nome do Professor]"</i><br>
-    • <i>"Mostrar turma [Nome da Turma]"</i><br>
-    • <i>"Ver estatísticas"</i>`);
 }
+
+async function callGemini(userText){
+  const key = getAiKey();
+  const thinking = addAiMessage('🤔 <i>Pensando...</i>');
+  const inp = document.getElementById('aiInput');
+  if(inp) inp.disabled = true;
+
+  const sys = `Você é o Assistente IA da FORTEC, sistema de geração de horários escolares brasileiros.
+Use as ferramentas disponíveis para executar ações reais no sistema quando o usuário pedir.
+Dados atuais: ${db.teachers.length} professores (${db.teachers.map(t=>t.name).join(', ')}), ${db.classes.length} turmas, horário ${db.schedule?'gerado':'não gerado'}.
+Responda sempre em português brasileiro de forma clara, direta e amigável.`;
+
+  aiHistory.push({role:'user', parts:[{text:userText}]});
+
+  const reqBody = {
+    system_instruction:{parts:[{text:sys}]},
+    contents: aiHistory,
+    tools: FORTEC_TOOLS,
+    generationConfig:{temperature:0.7, maxOutputTokens:1024}
+  };
+
+  try {
+    const r1 = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+      {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(reqBody)}
+    );
+    const d1 = await r1.json();
+    if(d1.error) throw new Error(d1.error.message);
+
+    const parts1 = (d1.candidates[0]&&d1.candidates[0].content&&d1.candidates[0].content.parts)||[];
+    const fns = parts1.filter(p=>p.functionCall);
+    let finalText = parts1.filter(p=>p.text).map(p=>p.text).join('');
+
+    if(fns.length > 0){
+      const results = fns.map(p=>({
+        functionResponse:{name:p.functionCall.name, response:{result:executeTool(p.functionCall.name, p.functionCall.args||{})}}
+      }));
+      aiHistory.push({role:'model', parts:parts1});
+      aiHistory.push({role:'user', parts:results});
+
+      const r2 = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+        {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+          system_instruction:reqBody.system_instruction,
+          contents:aiHistory,
+          generationConfig:reqBody.generationConfig
+        })}
+      );
+      const d2 = await r2.json();
+      const parts2 = (d2.candidates&&d2.candidates[0]&&d2.candidates[0].content&&d2.candidates[0].content.parts)||[];
+      finalText = parts2.filter(p=>p.text).map(p=>p.text).join('') || finalText;
+      aiHistory.push({role:'model', parts:parts2.length?parts2:parts1});
+    } else {
+      aiHistory.push({role:'model', parts:parts1});
+    }
+
+    if(aiHistory.length > 40) aiHistory = aiHistory.slice(-40);
+    thinking.innerHTML = finalText.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<b>$1</b>').replace(/\*(.*?)\*/g,'<i>$1</i>') || '(sem resposta)';
+
+  } catch(e){
+    thinking.innerHTML = `❌ <b>Erro Gemini:</b> ${e.message}<br><small>Verifique a chave em ⚙️. Se inválida, gere uma nova em <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com</a></small>`;
+  }
+  if(inp){ inp.disabled=false; inp.focus(); }
+}
+
+function fallbackCmd(text){
+  addAiMessage('⚙️ <b>Gemini não configurado.</b><br>Clique em ⚙️ no cabeçalho do chat, cole sua chave gratuita de <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> e clique Salvar.<br><br>Após configurar, posso responder qualquer pergunta sobre o horário! 🤖');
+}
+
+// Inicializar
+updateAiStatus();
 </script>
 
 </body>
 </html>
+
