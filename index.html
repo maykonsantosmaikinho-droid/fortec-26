@@ -15542,15 +15542,22 @@ function computeDayShapes(){
   return shapes;
 }
 
+function getTeacherAvail(teacherId){
+  const t = db.teachers.find(x=>x.id===teacherId);
+  if (t && t.availability && t.availability.length > 0) return t.availability;
+  return DAYS.map(d=>({day:d, periods:[0,1,2,3,4,5,6]}));
+}
+
 function buildNeedUnits(){
   const units=[];
   db.requirements.forEach(req=>{
     if(req.classIds.length===0 || !req.subjectId) return;
+    const avail = (req.availability && req.availability.length > 0) ? req.availability : getTeacherAvail(req.teacherId);
     if(req.joint){
       // conjunta: todas as turmas do grupo, ao mesmo tempo, mesma carga pro grupo inteiro
       for(let i=0;i<req.lessonsPerWeek;i++){
         units.push({id:uid('need'), reqId:req.id, teacherId:req.teacherId, subjectId:req.subjectId,
-          segment:req.segment, classIds:[...req.classIds], joint:true, availability:req.availability||[]});
+          segment:req.segment, classIds:[...req.classIds], joint:true, availability:avail});
       }
     } else {
       // não-conjunta: cada turma é independente, cada uma com sua própria carga (loadFor)
@@ -15558,7 +15565,7 @@ function buildNeedUnits(){
         const n = loadFor(req, cid);
         for(let i=0;i<n;i++){
           units.push({id:uid('need'), reqId:req.id, teacherId:req.teacherId, subjectId:req.subjectId,
-            segment:req.segment, classIds:[cid], joint:false, availability:req.availability||[]});
+            segment:req.segment, classIds:[cid], joint:false, availability:avail});
         }
       });
     }
