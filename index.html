@@ -1574,15 +1574,63 @@ function downloadText(filename, content, mime){
   }
 }
 
-/* ---- ÁREA DO PROFESSOR ---- */
-/* ---- ÁREA DO PROFESSOR ---- */
+/* ---- ÁREA DO PROFESSOR (AGENDA SEMANAL DE DISPONIBILIDADE) ---- */
+function teacherHasAvailSlot(t, day, idx){
+  if(!t.availability) {
+    const r = db.requirements.find(r=>r.teacherId===t.id && r.availability && r.availability.length);
+    if(r) t.availability = JSON.parse(JSON.stringify(r.availability));
+    else t.availability = DAYS.map(d=>({day:d, periods:[0,1,2,3,4,5,6]}));
+  }
+  const d = (t.availability||[]).find(a=>a.day===day);
+  return !!(d && d.periods.includes(idx));
+}
+
+function toggleTeacherAvailSlot(teacherId, day, idx){
+  const t = db.teachers.find(x=>x.id===teacherId);
+  if(!t) return;
+  if(!t.availability) t.availability = DAYS.map(d=>({day:d, periods:[0,1,2,3,4,5,6]}));
+  let d = t.availability.find(a=>a.day===day);
+  if(!d){ d={day, periods:[]}; t.availability.push(d); }
+  const i = d.periods.indexOf(idx);
+  if(i>=0) d.periods.splice(i,1); else d.periods.push(idx);
+
+  // Sincroniza essa disponibilidade geral para todas as disciplinas deste professor
+  const reqs = db.requirements.filter(r => r.teacherId === t.id);
+  reqs.forEach(r => {
+    r.availability = JSON.parse(JSON.stringify(t.availability));
+    r._availabilitySource = 'confirmada';
+  });
+
+  scheduleSave();
+  render();
+}
+
+function quickSetAvail(teacherId, type){
+  const t = db.teachers.find(x=>x.id===teacherId);
+  if(!t) return;
+  if(type==='all'){
+    t.availability = DAYS.map(d=>({day:d, periods:[0,1,2,3,4,5,6]}));
+  } else if(type==='morning'){
+    t.availability = DAYS.map(d=>({day:d, periods:[0,1,2,3,4]}));
+  } else if(type==='clear'){
+    t.availability = [];
+  }
+  const reqs = db.requirements.filter(r => r.teacherId === teacherId);
+  reqs.forEach(r => {
+    r.availability = JSON.parse(JSON.stringify(t.availability));
+    r._availabilitySource = 'confirmada';
+  });
+  scheduleSave();
+  render();
+}
+
 function renderTeacherSelf(){
   document.getElementById('navTabs').innerHTML='';
   const main=document.getElementById('main');
   if(!state.teacherSelfId){
     main.innerHTML = `<div class="card">
-      <h3 style="margin-top:0">🚪 Portal do Professor</h3>
-      <p class="muted">Selecione seu nome abaixo para preencher sua agenda de disponibilidade semanal:</p>
+      <h3 style="margin-top:0">🚪 Portal do Professor — Minha Disponibilidade</h3>
+      <p class="muted">Selecione seu nome abaixo para preencher os dias e horários em que você pode lecionar na escola:</p>
       <select class="input" style="font-size:14px;padding:10px" onchange="pickTeacherSelf(this.value)">
         <option value="">Escolha seu nome…</option>
         ${db.teachers.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
@@ -1592,51 +1640,44 @@ function renderTeacherSelf(){
     return;
   }
   const t = db.teachers.find(x=>x.id===state.teacherSelfId);
-  const reqs = db.requirements.filter(r => r.teacherId === t.id);
   main.innerHTML = `<div class="card" style="border-left:4px solid var(--amber)">
     <div class="spaced">
       <div>
         <h2 style="margin:0">📅 Agenda de Disponibilidade: ${t.name}</h2>
-        <p class="muted" style="margin:4px 0 0">Toque nos horários abaixo para marcar onde você PODE dar aula. O sistema salva na hora para a escola!</p>
+        <p class="muted" style="margin:4px 0 0">Marque em <b>dourado (✓ LIVRE)</b> as aulas em que você ESTÁ DISPONÍVEL. O sistema salva na hora para a escola!</p>
       </div>
       <button class="btn light sm" onclick="state.teacherSelfId=null;render()">Trocar professor</button>
     </div>
   </div>
 
   <div class="card">
-    <div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      <span class="label" style="margin:0;align-self:center">Ações rápidas:</span>
+    <div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <span class="label" style="margin:0">Preenchimento rápido:</span>
       <button class="btn sm light" onclick="quickSetAvail('${t.id}', 'all')">⚡ Semana toda livre</button>
-      <button class="btn sm light" onclick="quickSetAvail('${t.id}', 'morning')">🌅 Só até a 5ª aula (11:55)</button>
-      <button class="btn sm light" onclick="quickSetAvail('${t.id}', 'clear')">🧹 Limpar tudo</button>
+      <button class="btn sm light" onclick="quickSetAvail('${t.id}', 'morning')">🌅 Só manhãs (1ª a 5ª aula)</button>
+      <button class="btn sm light" onclick="quickSetAvail('${t.id}', 'clear')">🧹 Indisponível (limpar)</button>
     </div>
 
-    ${reqs.length===0? '<p class="muted">Nenhuma disciplina vinculada a você ainda — peça para a coordenação cadastrar suas matérias.</p>' :
-      reqs.map(r=>`<div style="margin-bottom:18px;border-top:1px solid var(--line);padding-top:12px">
-        <div style="font-weight:700;font-size:14px">${r.subjectId?subjectName(r.subjectId):'(disciplina)'}</div>
-        <div class="muted" style="font-size:12px;margin-bottom:6px">${r.classIds.map(className).join(', ')||'sem turmas'} · ${SEGS[r.segment].label}</div>
-        ${renderAvailGrid(r)}
-      </div>`).join('')}
+    ${renderTeacherGeneralAvailGrid(t)}
   </div>
-  ${reqs.length? `<div class="ok" style="margin-top:12px"><span>✓ Disponibilidade salva e sincronizada com o gerador da escola automaticamente!</span></div>`:''}`;
+  <div class="ok" style="margin-top:12px"><span>✓ Sua disponibilidade está salva e sincronizada para a escola montar o horário!</span></div>`;
+}
+
+function renderTeacherGeneralAvailGrid(t){
+  const periods = SEGS.M.periods;
+  let head = `<div style="display:grid;grid-template-columns:90px repeat(${DAYS.length},1fr);gap:6px;margin-top:8px">`;
+  head += `<div></div>` + DAYS.map(d=>`<div class="mono" style="text-align:center;font-size:12px;font-weight:700;color:var(--steel)">${DAY_LABELS[d]}</div>`).join('');
+  periods.forEach((p,idx)=>{
+    head += `<div class="mono" style="font-size:11px;color:var(--steel);display:flex;flex-direction:column;justify-content:center"><b>${idx+1}ª aula</b><span style="font-size:9px">${p.start}–${p.end}</span></div>`;
+    DAYS.forEach(day=>{
+      const on = teacherHasAvailSlot(t, day, idx);
+      head += `<button class="slot ${on?'active':''}" style="padding:10px 0;font-size:11px;font-weight:700" onclick="toggleTeacherAvailSlot('${t.id}','${day}',${idx})">${on?'✓ LIVRE':''}</button>`;
+    });
+  });
+  head+='</div>';
+  return head;
 }
 function pickTeacherSelf(id){ state.teacherSelfId=id||null; render(); }
-
-function quickSetAvail(teacherId, type){
-  const reqs = db.requirements.filter(r => r.teacherId === teacherId);
-  reqs.forEach(r => {
-    if(type==='all'){
-      r.availability = DAYS.map(d=>({day:d, periods:[0,1,2,3,4,5,6]}));
-    } else if(type==='morning'){
-      r.availability = DAYS.map(d=>({day:d, periods:[0,1,2,3,4]}));
-    } else if(type==='clear'){
-      r.availability = [];
-    }
-    r._availabilitySource='confirmada';
-  });
-  scheduleSave();
-  render();
-}
 
 /* ---------------- init ---------------- */
 (async function init(){
