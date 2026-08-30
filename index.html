@@ -1800,7 +1800,27 @@ function renderTeacherSelf(){
     </div>`;
     return;
   }
-  const t = db.teachers.find(x=>x.id===state.teacherSelfId);
+  const hasSchedule = db.schedule && db.schedule.lessons && db.schedule.lessons.some(l => l.teacherId === t.id);
+
+  let scheduleCard = '';
+  if (hasSchedule) {
+    scheduleCard = `<div class="card" style="margin-top:20px;border-left:4px solid var(--gold)">
+      <div class="spaced" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div>
+          <h3 style="margin:0">📅 Meu Horário de Aulas Gerado pela Escola</h3>
+          <p class="muted" style="margin:2px 0 0">Abaixo estão as turmas e disciplinas alocadas para você no horário oficial da escola:</p>
+        </div>
+        <button class="btn amber sm" style="font-weight:700" onclick="printTeacherSelfSchedule('${t.id}')">🖨️ Imprimir Meu Horário (PDF)</button>
+      </div>
+      ${renderTeacherBoard(t.id)}
+    </div>`;
+  } else {
+    scheduleCard = `<div class="card" style="margin-top:20px;background:rgba(255,255,255,0.03)">
+      <h3 style="margin-top:0">📅 Meu Horário de Aulas Oficial</h3>
+      <p class="muted" style="margin:0">O horário oficial de aulas ainda não foi gerado pela escola. Assim que a coordenação clicar em 'Gerar Horário', sua grade completa de aulas aparecerá aqui nesta mesma tela para você visualizar e imprimir!</p>
+    </div>`;
+  }
+
   main.innerHTML = `<div class="card" style="border-left:4px solid var(--amber)">
     <div class="spaced">
       <div>
@@ -1821,7 +1841,17 @@ function renderTeacherSelf(){
 
     ${renderTeacherGeneralAvailGrid(t)}
   </div>
-  <div class="ok" style="margin-top:12px"><span>✓ Sua disponibilidade está salva e sincronizada para a escola montar o horário!</span></div>`;
+  <div class="ok" style="margin-top:12px"><span>✓ Sua disponibilidade está salva e sincronizada para a escola montar o horário!</span></div>
+  
+  ${scheduleCard}`;
+}
+
+function printTeacherSelfSchedule(teacherId){
+  const t = db.teachers.find(x => x.id === teacherId);
+  if(!t) return;
+  state.scheduleView = 'professor';
+  state.scheduleFilter = teacherId;
+  printSchedule();
 }
 
 function renderTeacherGeneralAvailGrid(t){
