@@ -15757,7 +15757,7 @@ function auditSchedule(lessons){
     }
   });
 
-  // conflito real de professor (por horário, não por índice de período)
+  // conflito real de professor (diferentes matérias no mesmo horário para o mesmo professor)
   const byTeacherDay={};
   lessons.forEach(l=>{
     const key=l.teacherId+'|'+l.day;
@@ -15767,6 +15767,7 @@ function auditSchedule(lessons){
   });
   Object.values(byTeacherDay).forEach(list=>{
     for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++){
+      if(list[i].l.subjectId === list[j].l.subjectId || list[i].l.requirementId === list[j].l.requirementId) continue;
       if(overlaps(list[i].start,list[i].end,list[j].start,list[j].end)){
         hardViolations.push(`Professor ${teacherName(list[i].l.teacherId)} tem sobreposição real em ${DAY_LABELS[list[i].l.day]} (${subjectName(list[i].l.subjectId)} × ${subjectName(list[j].l.subjectId)})`);
       }
