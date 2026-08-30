@@ -1498,39 +1498,7 @@ function renderAuditoria(){
 function reaudit(){ db.schedule.audit = auditSchedule(db.schedule.lessons); render(); }
 
 function renderBackup(){
-  const siteUrl = (typeof window !== 'undefined' && window.location) ? (window.location.origin + window.location.pathname) : 'https://maykonsantosmaikinho-droid.github.io/fortec-26/';
-  const teacherShareUrl = cloudSyncId ? `${siteUrl}?cloud=${cloudSyncId}` : '';
-
-  return `<div class="card" style="border-left:4px solid #4ade80">
-    <h3 style="margin-top:0;display:flex;align-items:center;gap:6px">☁️ Sincronização em Nuvem em Tempo Real</h3>
-    <p class="muted" style="margin:4px 0 12px">Permite que os professores preencham a disponibilidade nos seus celulares de casa e o computador da escola receba na hora!</p>
-    
-    ${cloudSyncId ? `
-      <div class="ok" style="margin-bottom:12px;background:#152e22;border-color:#4ade80;color:#4ade80">
-        <b>🟢 Nuvem Conectada!</b><br>
-        ID da Nuvem: <code class="mono" style="background:#0f1828;padding:2px 6px;border-radius:4px">${cloudSyncId}</code>
-      </div>
-      <div class="row" style="gap:8px;flex-wrap:wrap">
-        <button class="btn amber sm" style="font-weight:700" onclick="copyTeacherLink('${teacherShareUrl}')">📱 Copiar Link do WhatsApp para os Professores</button>
-        <button class="btn light sm" onclick="syncCloudPull().then(()=>render())">🔄 Sincronizar Agora</button>
-        <button class="btn danger sm" onclick="disconnectCloud()">🔴 Desconectar</button>
-      </div>
-    ` : `
-      <p class="muted" style="margin-bottom:10px">Sua escola ainda não possui uma nuvem conectada.</p>
-      <div class="row" style="gap:8px">
-        <button class="btn amber block" style="flex:1;font-weight:700;padding:10px" onclick="createCloudSync()">⚡ Criar Banco em Nuvem Gratuito (1 clique)</button>
-      </div>
-      <div style="margin-top:14px">
-        <span class="label">Ou conecte a um ID de Nuvem existente:</span>
-        <div class="row">
-          <input class="input" id="connectCloudId" placeholder="Cole o ID da nuvem da escola aqui…" style="flex:1">
-          <button class="btn light sm" onclick="connectCloud(document.getElementById('connectCloudId').value)">Conectar</button>
-        </div>
-      </div>
-    `}
-  </div>
-
-  <div class="card">
+  return `<div class="card">
     <h3 style="margin-top:0">🔒 Senha de Acesso da Escola</h3>
     <p class="muted">Defina a senha que protege o acesso a "Sou da escola". (Senha padrão inicial: <b>1234</b>)</p>
     <div class="row">
@@ -1540,19 +1508,20 @@ function renderBackup(){
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0">Backup Local (Arquivo JSON)</h3>
+    <h3 style="margin-top:0">💾 Backup Local (Arquivo JSON)</h3>
     <button class="btn amber block" onclick="exportBackup()">⬇ Exportar backup (JSON)</button>
     <div class="divider"></div>
     <span class="label">Importar backup</span>
     <input type="file" accept="application/json" id="backupFile" onchange="importBackup(event)">
   </div>
+
   <div class="card"><h3 style="margin-top:0">Zerar dados</h3>
     <p class="muted">Remove todos os professores, turmas, disciplinas e o horário gerado.</p>
     <button class="btn danger block" onclick="resetAll()">Apagar tudo</button>
   </div>
+
   <div class="card"><h3 style="margin-top:0">Recarregar dados originais do arquivo</h3>
     <p class="muted">Se o app parecer "travado" numa versão antiga depois que eu te mandar um arquivo novo, use isto para descartar o que está salvo e usar os dados que vieram junto com este HTML.</p>
-    <button class="btn light block" onclick="reloadEmbedded()">Recarregar do arquivo</button>
   </div>`;
 }
 
