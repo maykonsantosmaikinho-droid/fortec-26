@@ -870,9 +870,14 @@ function renderSeriesGroup(series){
         reqs.forEach(r=>{ (bySubject[r.subjectId]=bySubject[r.subjectId]||[]).push(r); });
         const subjectCount = Object.keys(bySubject).length;
         return `<div class="teacher-item"><details>
-          <summary class="teacher-person-summary"><div><div class="teacher-name">${t.name}</div>
-          <div class="mini muted">${subjectCount} disciplina(s) nesta série · toque para abrir</div></div><span class="req-group-arrow">⌄</span></summary>
+          <summary class="teacher-person-summary"><div><div class="teacher-name" id="tname-${t.id}">${t.name}</div>
+          <div class="mini muted">${subjectCount} disciplina(s) nesta série · toque para abrir</div></div><span class="req-group-arrow">⋄</span></summary>
           <div class="teacher-person-body">
+            <div class="row" style="margin-bottom:8px;gap:6px;align-items:center">
+              <span class="label" style="margin:0">✏️ Renomear professor:</span>
+              <input class="input" id="rename-${t.id}" value="${t.name}" style="flex:1;font-size:12px">
+              <button class="btn amber sm" onclick="renameTeacher('${t.id}')">✓ Salvar nome</button>
+            </div>
             ${Object.values(bySubject).map(group=>renderSubjectGroup(t,group)).join('')}
             <button class="btn light block" style="margin-top:8px" onclick="addRequirementFor('${t.id}','${series.includes('Fundamental')?'F':'M'}')">＋ Adicionar disciplina para ${t.name.split(' ')[0]} nesta série</button>
             <button class="btn danger block" style="margin-top:6px" onclick="removeTeacher('${t.id}')">Excluir ${t.name.split(' ')[0]} (todas as séries)</button>
@@ -987,6 +992,19 @@ function removeTeacher(id){
   db.requirements=db.requirements.filter(r=>r.teacherId!==id);
   db.teachers=db.teachers.filter(t=>t.id!==id);
   scheduleSave(); render();
+}
+function renameTeacher(id){
+  const input = document.getElementById('rename-'+id);
+  if(!input) return;
+  const newName = input.value.trim();
+  if(!newName){ alert('Digite um nome válido.'); return; }
+  const t = db.teachers.find(t=>t.id===id);
+  if(!t) return;
+  const oldName = t.name;
+  t.name = newName;
+  scheduleSave();
+  render();
+  showSaveIndicator(`✓ ${oldName} → ${newName}`);
 }
 function addRequirement(teacherId){
   db.requirements.push({id:uid('req'), teacherId, subjectId:'', segment:'F', classIds:[],
