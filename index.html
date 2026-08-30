@@ -947,10 +947,11 @@ function renderSeriesGroup(series){
           <summary class="teacher-person-summary"><div><div class="teacher-name" id="tname-${t.id}">${t.name}</div>
           <div class="mini muted">${subjectCount} disciplina(s) nesta série · toque para abrir</div></div><span class="req-group-arrow">⋄</span></summary>
           <div class="teacher-person-body">
-            <div class="row" style="margin-bottom:8px;gap:6px;align-items:center">
-              <span class="label" style="margin:0">✏️ Renomear professor:</span>
-              <input class="input" id="rename-${t.id}" value="${t.name}" style="flex:1;font-size:12px">
+            <div class="row" style="margin-bottom:8px;gap:6px;align-items:center;flex-wrap:wrap">
+              <span class="label" style="margin:0">✏️ Renomear:</span>
+              <input class="input" id="rename-${t.id}" value="${t.name}" style="flex:1;font-size:12px;min-width:120px">
               <button class="btn amber sm" onclick="renameTeacher('${t.id}')">✓ Salvar nome</button>
+              <button class="btn light sm" style="border-color:var(--gold);color:var(--navy);font-weight:600" onclick="copyIndividualTeacherLink('${t.id}')">📱 Link WhatsApp</button>
             </div>
             ${Object.values(bySubject).map(group=>renderSubjectGroup(t,group)).join('')}
             <button class="btn light block" style="margin-top:8px" onclick="addRequirementFor('${t.id}','${series.includes('Fundamental')?'F':'M'}')">＋ Adicionar disciplina para ${t.name.split(' ')[0]} nesta série</button>
@@ -1813,12 +1814,43 @@ function renderTeacherGeneralAvailGrid(t){
 }
 function pickTeacherSelf(id){ state.teacherSelfId=id||null; render(); }
 
+function copyIndividualTeacherLink(teacherId){
+  const t = db.teachers.find(x=>x.id===teacherId);
+  if(!t) return;
+  const siteUrl = (typeof window !== 'undefined' && window.location) ? (window.location.origin + window.location.pathname) : 'https://maykonsantosmaikinho-droid.github.io/fortec-26/';
+  const link = `${siteUrl}?role=teacher&teacher=${t.id}${cloudSyncId ? '&cloud='+cloudSyncId : ''}`;
+  const msg = `Olá Prof. ${t.name}! Acesse o link abaixo no seu celular para marcar sua disponibilidade semanal na agenda da escola:\n\n${link}`;
+  
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(msg).then(()=>{
+      alert(`✅ Link exclusivo do(a) Prof. ${t.name} copiado!\n\nVocê já pode colar no WhatsApp do professor.`);
+    }).catch(()=>{
+      prompt(`Copie o link direto do(a) Prof. ${t.name}:`, msg);
+    });
+  } else {
+    prompt(`Copie o link direto do(a) Prof. ${t.name}:`, msg);
+  }
+}
+
 /* ---------------- init ---------------- */
 (async function init(){
   await loadDb();
   if(db.schedule && !db.schedule.audit){ db.schedule.audit = auditSchedule(db.schedule.lessons); }
-  render();
-  document.getElementById('roleGate').classList.remove('hidden');
+
+  if (typeof window !== 'undefined' && window.location && window.location.search) {
+    const params = new URLSearchParams(window.location.search);
+    const r = params.get('role') || params.get('mode');
+    const tId = params.get('teacher') || params.get('prof');
+    if (r === 'teacher' || r === 'professor') {
+      state.role = 'teacher';
+      if (tId) {
+        const match = db.teachers.find(t => t.id === tId || normStr(t.name).includes(normStr(tId)));
+        if (match) state.teacherSelfId = match.id;
+      }
+    }
+  }
+
+  setRole(state.role);
 })();
 </script>
 
