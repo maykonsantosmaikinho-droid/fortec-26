@@ -1683,13 +1683,13 @@ function updateAiStatus(){
   const hint = document.getElementById('aiKeyHint');
   const sel = document.getElementById('aiModelSelect');
   // Sync model selector with saved value
-  if(sel){ const m = getAiModel(); for(let o of sel.options) if(o.value===m){ o.selected=true; break; } }
+  if(sel && sel.options){ const m = getAiModel(); for(let o of sel.options) if(o.value===m){ o.selected=true; break; } }
   if(getAiKey()){
-    if(el){ el.textContent = '● Gemini ativo (' + getAiModel().replace('gemini-','') + ')'; el.style.color = '#4ade80'; }
+    if(el){ el.textContent = '● Gemini ativo (' + getAiModel().replace('gemini-','') + ')'; if(el.style) el.style.color = '#4ade80'; }
     if(panel) panel.style.display = 'none';
     if(hint) hint.style.display = 'none';
   } else {
-    if(el){ el.textContent = '● cole sua chave'; el.style.color = '#f59e0b'; }
+    if(el){ el.textContent = '● cole sua chave'; if(el.style) el.style.color = '#f59e0b'; }
     if(panel) panel.style.display = 'block';
   }
 }
@@ -1757,7 +1757,19 @@ const FORTEC_TOOLS = [{
     { name:'ver_horario_geral', description:'Mostra a grade geral da escola.', parameters:{type:'OBJECT',properties:{}} },
     { name:'consultar_dados', description:'Retorna dados reais da escola: professores, turmas, disciplinas, requisitos, estatísticas.', parameters:{type:'OBJECT',properties:{}} },
     { name:'ir_aba', description:'Navega para uma aba: turmas, disciplinas, professores, gerar, horario, auditoria, backup.',
-      parameters:{type:'OBJECT', properties:{ aba:{type:'STRING',description:'nome da aba'} }, required:['aba']} }
+      parameters:{type:'OBJECT', properties:{ aba:{type:'STRING',description:'nome da aba'} }, required:['aba']} },
+    { name:'alterar_disponibilidade_professor',
+      description:'Altera os dias de disponibilidade de um professor e recalcula o horário da escola. SEGURANÇA: Passe confirmado=false se o usuário ainda não deu confirmação direta no chat. Passe confirmado=true apenas após confirmação.',
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          nome_professor:{type:'STRING',description:'Nome do professor, ex: SIMONI, WILRANI'},
+          dias:{type:'ARRAY',items:{type:'STRING'},description:'Dias em que o professor PODE dar aula. Códigos: SEG, TER, QUA, QUI, SEX'},
+          confirmado:{type:'BOOLEAN',description:'true se o usuário confirmou a alteração no chat; false se pendente.'}
+        },
+        required:['nome_professor','dias','confirmado']
+      }
+    }
   ]
 }];
 
@@ -1813,6 +1825,47 @@ function executeTool(name, args){
         auditoria: audit?(audit.ok?'VÁLIDO':`${audit.hardViolations.length} violações`):'sem horário'
       },null,2);
     }
+    case 'alterar_disponibilidade_professor': {
+      const n = normStr(args.nome_professor);
+      const t = db.teachers.find(t => normStr(t.name).includes(n) || n.split(' ').some(w=>w.length>2&&normStr(t.name).includes(w)));
+      if(!t) return `Professor(a) "${args.nome_professor}" não encontrado(a). Professores cadastrados: ${db.teachers.map(t=>t.name).join(', ')}`;
+
+      const validDaysMap = { SEG:'Segunda', TER:'Terça', QUA:'Quarta', QUI:'Quinta', SEX:'Sexta' };
+      const rawDays = Array.isArray(args.dias) ? args.dias : [];
+      const chosenDays = rawDays.map(d => d.toUpperCase().trim()).filter(d => validDaysMap[d]);
+
+      if(chosenDays.length === 0){
+        return `Nenhum dia válido informado. Os dias permitidos são: SEG, TER, QUA, QUI, SEX.`;
+      }
+
+      const diasDesc = chosenDays.map(d => validDaysMap[d]).join(', ');
+
+      if(!args.confirmado){
+        return `CONFIRMAÇÃO PENDENTE: A alteração para o(a) professor(a) ${t.name} (novos dias: [${diasDesc}]) AINDA NÃO FOI APLICADA.
+INSTRUÇÕES OBRIGATÓRIAS PARA O ASSISTENTE IA:
+1. Recomende expressamente que o usuário faça o backup do horário atual por segurança (baixe a planilha Excel ou exporte o backup JSON na aba Backup).
+2. Detalhe os novos dias (${t.name} -> ${diasDesc}).
+3. Peça a confirmação explícita do usuário no chat antes de aplicar.`;
+      }
+
+      // Aplicar a alteração
+      const reqs = db.requirements.filter(r => r.teacherId === t.id);
+      if(reqs.length === 0){
+        return `O(A) professor(a) ${t.name} existe, mas não possui disciplinas cadastradas para alterar.`;
+      }
+
+      const newAvail = chosenDays.map(day => ({ day: day, periods: [0, 1, 2, 3, 4, 5, 6] }));
+      reqs.forEach(r => { r.availability = JSON.parse(JSON.stringify(newAvail)); });
+
+      scheduleSave();
+      generateSchedule();
+      state.adminTab = 'horario';
+      state.scheduleView = 'professor';
+      state.scheduleFilter = t.id;
+      render();
+
+      return `SUCESSO! A disponibilidade do(a) professor(a) ${t.name} foi alterada para: ${diasDesc}. O horário da escola foi recalculado e auditado automaticamente e a grade está sendo exibida na tela!`;
+    }
     default: return 'ok';
   }
 }
@@ -1824,10 +1877,16 @@ async function callGemini(userText){
   const inp = document.getElementById('aiInput');
   if(inp) inp.disabled = true;
 
-  const sys = `Você é o Assistente IA da FORTEC, sistema de geração de horários escolares brasileiros.
-Use as ferramentas disponíveis para executar ações reais no sistema quando o usuário pedir.
-Dados atuais: ${db.teachers.length} professores (${db.teachers.map(t=>t.name).join(', ')}), ${db.classes.length} turmas, horário ${db.schedule?'gerado':'não gerado'}.
-Responda sempre em português brasileiro de forma clara, direta e amigável.`;
+  const sys = `Você é o Assistente IA da FORTEC, sistema inteligente de geração de horários escolares brasileiros.
+Você pode consultar dados, alterar disponibilidades de professores, auditar e recalcular horários.
+Dados atuais da escola: ${db.teachers.length} professores (${db.teachers.map(t=>t.name).join(', ')}), ${db.classes.length} turmas, horário ${db.schedule?'gerado':'não gerado'}.
+
+REGRAS DE SEGURANÇA PARA ALTERAÇÃO DE DISPONIBILIDADE:
+1. Quando o usuário solicitar alteração de disponibilidade de um professor (ex: "professora X só pode dar aula nos dias Y"):
+   - Se ele NÃO confirmou na conversa recente, chame 'alterar_disponibilidade_professor' com confirmado=false.
+   - Na sua resposta, DEVE OBRIGATORIAMENTE avisar para salvar um backup do horário atual (baixar Excel ou exportar backup na aba Backup), mostrar os detalhes do ajuste e pedir confirmação no chat ("Confirma a alteração?").
+2. Se o usuário já confirmou ("sim", "confirmo", "pode alterar"), chame 'alterar_disponibilidade_professor' com confirmado=true para APLICAR e RECALCULAR o horário.
+3. Responda em português brasileiro de forma clara, amigável e direta.`;
 
   aiHistory.push({role:'user', parts:[{text:userText}]});
 
