@@ -1889,27 +1889,27 @@ function copyIndividualTeacherLink(teacherId){
     <button class="ai-close-btn" onclick="toggleAiWidget()">✕</button>
   </div>
   <div id="aiConfigPanel" style="background:#0f1828;padding:10px 12px;border-bottom:1px solid rgba(221,154,43,0.3)">
-    <div style="font-size:11px;color:#dd9a2b;margin-bottom:6px;font-weight:600">🔑 Cole sua chave Google Gemini para ativar a IA:</div>
+    <div style="font-size:11px;color:#dd9a2b;margin-bottom:6px;font-weight:600">🔑 Cole sua chave de API para ativar a IA:</div>
     <div style="display:flex;gap:6px">
-      <input type="text" id="aiKeyInput" class="ai-input" style="flex:1;font-size:11px" placeholder="AIzaSy...">
+      <input type="text" id="aiKeyInput" class="ai-input" style="flex:1;font-size:11px" placeholder="Cole sua chave aqui (AIzaSy...)">
       <button class="ai-send-btn" onclick="saveAiKey()" style="font-size:11px;white-space:nowrap;padding:0 10px">✓ Salvar</button>
     </div>
     <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
       <span style="font-size:10px;color:#aaa">Modelo:</span>
       <select id="aiModelSelect" class="ai-input" style="font-size:10px;padding:2px 4px;flex:1" onchange="saveAiModel()">
-        <option value="gemini-3.6-flash">gemini-3.6-flash (rápido, grátis ✅)</option>
-        <option value="gemini-2.5-flash">gemini-2.5-flash (melhor)</option>
-        <option value="gemini-2.5-pro">gemini-2.5-pro (mais inteligente)</option>
-        <option value="gemini-1.5-flash">gemini-1.5-flash (fallback)</option>
-        <option value="gemini-1.5-pro">gemini-1.5-pro (fallback pro)</option>
+        <option value="gemini-3.6-flash">IA Rápida (Recomendado ✅)</option>
+        <option value="gemini-2.5-flash">IA Avançada</option>
+        <option value="gemini-2.5-pro">IA Pro (Mais Inteligente)</option>
+        <option value="gemini-1.5-flash">IA Padrão</option>
+        <option value="gemini-1.5-pro">IA Padrão Pro</option>
       </select>
     </div>
-    <div style="font-size:10px;color:#666;margin-top:4px">Chave gratuita: <b style="color:#aaa">aistudio.google.com/apikey</b> — fica só no seu navegador</div>
+    <div style="font-size:10px;color:#666;margin-top:4px">Sua chave é salva <b style="color:#aaa">apenas no seu navegador</b> com total privacidade</div>
   </div>
   <div class="ai-messages" id="aiMessages">
     <div class="ai-msg bot" id="aiWelcomeMsg">
-      Olá! Sou o Assistente IA FORTEC com <b>Gemini</b> integrado. 🤖<br><br>
-      Cole sua chave acima para ativar o Gemini real e me perguntar <b>qualquer coisa</b> sobre o horário!
+      Olá! Sou o Assistente IA FORTEC. 🤖<br><br>
+      Cole sua chave acima para me ativar e me perguntar <b>qualquer coisa</b> sobre o horário!
     </div>
   </div>
   <div class="ai-chips" id="aiChips">
@@ -1925,24 +1925,28 @@ function copyIndividualTeacherLink(teacherId){
 </div>
 <script>
 // =============================================
-// ASSISTENTE IA FORTEC — GEMINI REAL INTEGRADO
+// ASSISTENTE IA FORTEC
 // =============================================
 let aiHistory = [];
 
-function getAiKey(){ return localStorage.getItem('fortec-gemini-key') || ''; }
-function getAiModel(){ return localStorage.getItem('fortec-gemini-model') || 'gemini-3.6-flash'; }
+function getAiKey(){ return localStorage.getItem('fortec-ai-key') || localStorage.getItem('fortec-gemini-key') || ''; }
+function getAiModel(){ return localStorage.getItem('fortec-ai-model') || localStorage.getItem('fortec-gemini-model') || 'gemini-3.6-flash'; }
 function saveAiModel(){
   const sel = document.getElementById('aiModelSelect');
-  if(sel) localStorage.setItem('fortec-gemini-model', sel.value);
+  if(sel) {
+    localStorage.setItem('fortec-ai-model', sel.value);
+    localStorage.setItem('fortec-gemini-model', sel.value);
+  }
 }
 
 function saveAiKey(){
   const k = document.getElementById('aiKeyInput').value.trim();
   if(!k){ alert('Cole uma chave válida.'); return; }
+  localStorage.setItem('fortec-ai-key', k);
   localStorage.setItem('fortec-gemini-key', k);
   toggleAiConfig();
   updateAiStatus();
-  addAiMessage('✅ <b>Chave salva com sucesso!</b> Agora sou o Gemini real. Pode me perguntar qualquer coisa! 🎉');
+  addAiMessage('✅ <b>Chave salva com sucesso!</b> Agora o Assistente IA está ativo. Pode me perguntar qualquer coisa! 🎉');
 }
 
 function updateAiStatus(){
@@ -1950,10 +1954,9 @@ function updateAiStatus(){
   const panel = document.getElementById('aiConfigPanel');
   const hint = document.getElementById('aiKeyHint');
   const sel = document.getElementById('aiModelSelect');
-  // Sync model selector with saved value
   if(sel && sel.options){ const m = getAiModel(); for(let o of sel.options) if(o.value===m){ o.selected=true; break; } }
   if(getAiKey()){
-    if(el){ el.textContent = '● Gemini ativo (' + getAiModel().replace('gemini-','') + ')'; if(el.style) el.style.color = '#4ade80'; }
+    if(el){ el.textContent = '● IA ativa (' + getAiModel().replace('gemini-','') + ')'; if(el.style) el.style.color = '#4ade80'; }
     if(panel) panel.style.display = 'none';
     if(hint) hint.style.display = 'none';
   } else {
@@ -2213,13 +2216,13 @@ REGRAS DE SEGURANÇA PARA ALTERAÇÃO DE DISPONIBILIDADE:
     thinking.innerHTML = finalText.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<b>$1</b>').replace(/\*(.*?)\*/g,'<i>$1</i>') || '(sem resposta)';
 
   } catch(e){
-    thinking.innerHTML = `❌ <b>Erro Gemini:</b> ${e.message}<br><small>Verifique a chave em ⚙️. Se inválida, gere uma nova em <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com</a></small>`;
+    thinking.innerHTML = `❌ <b>Erro na IA:</b> ${e.message}<br><small>Verifique a chave nas configurações (⚙️).</small>`;
   }
   if(inp){ inp.disabled=false; inp.focus(); }
 }
 
 function fallbackCmd(text){
-  addAiMessage('⚙️ <b>Gemini não configurado.</b><br>Clique em ⚙️ no cabeçalho do chat, cole sua chave gratuita de <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> e clique Salvar.<br><br>Após configurar, posso responder qualquer pergunta sobre o horário! 🤖');
+  addAiMessage('⚙️ <b>IA não configurada.</b><br>Clique em ⚙️ no cabeçalho do chat, cole sua chave e clique Salvar.<br><br>Após configurar, posso responder qualquer pergunta sobre o horário! 🤖');
 }
 
 // Inicializar
