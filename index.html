@@ -711,7 +711,7 @@ function solveBacktrack(units, shapes, opts){
   const result = backtrack();
   if(result!==true && bestSnapshot && bestPlacedCount>0){
     // não fechou 100% — restaura o melhor estado parcial encontrado durante a busca
-units.forEach(u=>u._placed=null);
+    units.forEach(u=>u._placed=null);
     const byId={}; units.forEach(u=>byId[u.id]=u);
     bestSnapshot.forEach(s=>{ byId[s.unitId]._placed={day:s.day, realIdx:s.realIdx}; });
   }
@@ -724,13 +724,9 @@ units.forEach(u=>u._placed=null);
 }
 
 function generateSchedule(forceRegen = false){
-  // GERADOR AUTOMÁTICO FORTEC - MANTÉM BASELINE 100% LIMPO COM 0 ERROS E 0 JANELAS
-  if (typeof EMBEDDED_DB !== 'undefined' && EMBEDDED_DB.schedule && EMBEDDED_DB.schedule.lessons) {
+  if (!forceRegen && typeof EMBEDDED_DB !== 'undefined' && EMBEDDED_DB.schedule && EMBEDDED_DB.schedule.lessons) {
     const baseLessons = JSON.parse(JSON.stringify(EMBEDDED_DB.schedule.lessons));
-    
-    // Re-aplica compactação automática de janelas em todas as turmas
     autoCompactGaps(baseLessons);
-    
     const audit = auditSchedule(baseLessons);
     db.schedule = {
       lessons: baseLessons,
