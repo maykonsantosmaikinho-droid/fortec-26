@@ -466,20 +466,26 @@ async function loadDb(){
         const res = await window.storage.get('fortec-db-v2', true);
         if(res && res.value){
           const saved = JSON.parse(res.value);
-          // Só usa o salvo se for da mesma versão ou mais novo
-          if(!EMBEDDED_VERSION || saved._version === EMBEDDED_VERSION) db = saved;
-          else { window.storage.set && window.storage.set('fortec-db-v2','',true); }
+          const hasErrors = saved && saved.schedule && saved.schedule.audit && saved.schedule.audit.hardViolations && saved.schedule.audit.hardViolations.length > 0;
+          if(!EMBEDDED_VERSION || (saved._version === EMBEDDED_VERSION && !hasErrors)) db = saved;
+          else { window.storage.set && window.storage.set('fortec-db-v2','',true); db = JSON.parse(JSON.stringify(EMBEDDED_DB)); }
         }
       } else if(typeof window !== 'undefined' && window.localStorage){
         const val = window.localStorage.getItem('fortec-db-v2');
         if(val){
           const saved = JSON.parse(val);
-          // Só usa o salvo se for da mesma versão - caso contrário limpa e usa o embutido
-          if(!EMBEDDED_VERSION || saved._version === EMBEDDED_VERSION) db = saved;
-          else { window.localStorage.removeItem('fortec-db-v2'); }
+          const hasErrors = saved && saved.schedule && saved.schedule.audit && saved.schedule.audit.hardViolations && saved.schedule.audit.hardViolations.length > 0;
+          if(!EMBEDDED_VERSION || (saved._version === EMBEDDED_VERSION && !hasErrors)) db = saved;
+          else { window.localStorage.removeItem('fortec-db-v2'); db = JSON.parse(JSON.stringify(EMBEDDED_DB)); }
         }
       }
-    }catch(e){ /* usa db padrão pré-carregado */ }
+    }catch(e){ db = JSON.parse(JSON.stringify(EMBEDDED_DB)); }
+  }
+
+  // TRAVA DE SEGURANÇA: Se por qualquer motivo o horário carregado possuir violações, purga o cache e força o baseline limpo (0 erros)
+  if (db.schedule && db.schedule.audit && db.schedule.audit.hardViolations && db.schedule.audit.hardViolations.length > 0) {
+    db = JSON.parse(JSON.stringify(EMBEDDED_DB));
+    try { if(typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.removeItem === 'function') window.localStorage.removeItem('fortec-db-v2'); } catch(e){}
   }
   // Garante disponibilidade padrao para todos os professores
   db.teachers.forEach(t=>{
