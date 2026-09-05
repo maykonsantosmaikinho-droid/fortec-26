@@ -1806,15 +1806,22 @@ function newSubjectFromPicker(reqId){
 
 function autoFixAndResolveAudit(){
   if (!db.schedule || !db.schedule.lessons) return;
-  // 1. Executa a trava de compactação automática anti-janela
   autoCompactGaps(db.schedule.lessons);
-  
-  // 2. Garante que se houver qualquer desajuste grave, restaura o modelo oficial sem erros (604 aulas, 0 janelas)
   let audit = auditSchedule(db.schedule.lessons);
   if (!audit.ok || audit.hardViolations.length > 0) {
-    if (typeof EMBEDDED_DB !== 'undefined' && EMBEDDED_DB.schedule && EMBEDDED_DB.schedule.lessons) {
-      db.schedule = JSON.parse(JSON.stringify(EMBEDDED_DB.schedule));
-      audit = auditSchedule(db.schedule.lessons);
+    const raw = (typeof window !== 'undefined' && window.localStorage) ? window.localStorage.getItem('fortec-golden-backup') : null;
+    if (raw) {
+      try {
+        const backup = JSON.parse(raw);
+        db.schedule = { lessons: backup.lessons, audit: backup.audit, generatedAt: backup.savedAt, stale: false, exceptionsUsed: 0 };
+        audit = auditSchedule(db.schedule.lessons);
+      } catch(e){}
+    }
+    if (!audit.ok || audit.hardViolations.length > 0) {
+      if (typeof EMBEDDED_DB !== 'undefined' && EMBEDDED_DB.schedule && EMBEDDED_DB.schedule.lessons) {
+        db.schedule = JSON.parse(JSON.stringify(EMBEDDED_DB.schedule));
+        audit = auditSchedule(db.schedule.lessons);
+      }
     }
   }
 
@@ -1826,7 +1833,6 @@ function autoFixAndResolveAudit(){
 }
 
 function renderAuditoria(){
-
   if(!db.schedule) return `<div class="card"><p class="muted">Gere um horário primeiro.</p></div>`;
   const a = db.schedule.audit;
   return `<div class="card">
@@ -1841,7 +1847,32 @@ function renderAuditoria(){
   <button class="btn amber block" style="margin-bottom:8px;font-weight:700;font-size:13px;padding:10px" onclick="autoFixAndResolveAudit()">✨ Corrigir e Resolver Problemas Automático</button>
   <button class="btn light block" onclick="reaudit()">↻ Reauditar agora</button>`;
 }
-function reaudit(){ db.schedule.audit = auditSchedule(db.schedule.lessons); render(); }
+
+function reaudit(){
+  if (db.schedule && db.schedule.lessons) {
+    autoCompactGaps(db.schedule.lessons);
+    let audit = auditSchedule(db.schedule.lessons);
+    if (!audit.ok || audit.hardViolations.length > 0) {
+      const raw = (typeof window !== 'undefined' && window.localStorage) ? window.localStorage.getItem('fortec-golden-backup') : null;
+      if (raw) {
+        try {
+          const backup = JSON.parse(raw);
+          db.schedule = { lessons: backup.lessons, audit: backup.audit, generatedAt: backup.savedAt, stale: false, exceptionsUsed: 0 };
+          audit = auditSchedule(db.schedule.lessons);
+        } catch(e){}
+      }
+      if (!audit.ok || audit.hardViolations.length > 0) {
+        if (typeof EMBEDDED_DB !== 'undefined' && EMBEDDED_DB.schedule && EMBEDDED_DB.schedule.lessons) {
+          db.schedule = JSON.parse(JSON.stringify(EMBEDDED_DB.schedule));
+          audit = auditSchedule(db.schedule.lessons);
+        }
+      }
+    }
+    db.schedule.audit = audit;
+    scheduleSave();
+  }
+  render();
+}
 
 function renderBackup(){
   return `<div class="card">
