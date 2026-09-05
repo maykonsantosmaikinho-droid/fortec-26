@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/glpk.js@4.0.2/dist/glpk.min.js"></script>
 <style>
 :root{
   --navy:#182741; --navy-2:#233a5e; --amber:#dd9a2b; --amber-deep:#b97c14;
@@ -711,7 +712,7 @@ function solveBacktrack(units, shapes, opts){
   const result = backtrack();
   if(result!==true && bestSnapshot && bestPlacedCount>0){
     // não fechou 100% — restaura o melhor estado parcial encontrado durante a busca
-    units.forEach(u=>u._placed=null);
+units.forEach(u=>u._placed=null);
     const byId={}; units.forEach(u=>byId[u.id]=u);
     bestSnapshot.forEach(s=>{ byId[s.unitId]._placed={day:s.day, realIdx:s.realIdx}; });
   }
@@ -721,6 +722,233 @@ function solveBacktrack(units, shapes, opts){
   }));
   const unplaced = units.filter(u=>!u._placed).length;
   return {lessons, unplaced, complete: result===true};
+}
+
+/* ---------------- OPTIMIZADOR GLPK MILP (WEB WORKER) ---------------- */
+
+function buildGLPKModel(dbData) {
+  const DAYS_LIST = ['SEG', 'TER', 'QUA', 'QUI', 'SEX'];
+  const units = buildNeedUnits();
+  const subjectTo = [];
+  const binaries = [];
+  const objVars = [];
+
+  const unitVarMap = {};
+  const classSlotVars = {};
+  const teacherSlotVars = {};
+
+  dbData.classes.forEach(c => {
+    classSlotVars[c.id] = {};
+    DAYS_LIST.forEach(d => { classSlotVars[c.id][d] = { 0:[], 1:[], 2:[], 3:[], 4:[], 5:[], 6:[] }; });
+  });
+
+  dbData.teachers.forEach(t => {
+    teacherSlotVars[t.id] = {};
+    DAYS_LIST.forEach(d => { teacherSlotVars[t.id][d] = { 0:[], 1:[], 2:[], 3:[], 4:[], 5:[], 6:[] }; });
+  });
+
+  const pcSubjects = new Set((dbData.subjects || []).filter(s => s.name && s.name.toLowerCase().includes('processos criativos')).map(s => s.id));
+
+  units.forEach((u, uIdx) => {
+    unitVarMap[u.id] = [];
+    const maxP = u.segment === 'F' ? 4 : 6;
+    const isPC = pcSubjects.has(u.subjectId);
+
+    DAYS_LIST.forEach(d => {
+      const dayAvail = (u.availability || []).find(a => a.day === d);
+      if (!dayAvail) return;
+
+      for (let p = 0; p <= maxP; p++) {
+        if (!dayAvail.periods.includes(p)) continue;
+
+        const varName = `x_${uIdx}_${d}_${p}`;
+        binaries.push(varName);
+        unitVarMap[u.id].push({ varName, day: d, period: p, uIdx });
+
+        let weight = 100;
+        if (isPC) {
+          if (p === 0 || p === maxP) weight += 20;
+          else weight -= 10;
+        }
+
+        objVars.push({ name: varName, coef: weight });
+
+        u.classIds.forEach(cid => {
+          if (classSlotVars[cid] && classSlotVars[cid][d] && classSlotVars[cid][d][p]) {
+            classSlotVars[cid][d][p].push(varName);
+          }
+        });
+
+        if (teacherSlotVars[u.teacherId] && teacherSlotVars[u.teacherId][d] && teacherSlotVars[u.teacherId][d][p]) {
+          teacherSlotVars[u.teacherId][d][p].push(varName);
+        }
+      }
+    });
+
+    if (unitVarMap[u.id].length > 0) {
+      subjectTo.push({
+        name: `u_max1_${uIdx}`,
+        bnds: { type: 3 /* GLP_UP */, ub: 1, lb: 0 },
+        vars: unitVarMap[u.id].map(v => ({ name: v.varName, coef: 1 }))
+      });
+    }
+  });
+
+  let cCount = 0;
+  dbData.teachers.forEach(t => {
+    DAYS_LIST.forEach(d => {
+      for (let p = 0; p <= 6; p++) {
+        const vList = teacherSlotVars[t.id][d][p];
+        if (vList.length > 1) {
+          cCount++;
+          subjectTo.push({
+            name: `t_coll_${t.id}_${d}_${p}_${cCount}`,
+            bnds: { type: 3 /* GLP_UP */, ub: 1, lb: 0 },
+            vars: vList.map(v => ({ name: v, coef: 1 }))
+          });
+        }
+      }
+    });
+  });
+
+  dbData.classes.forEach(c => {
+    DAYS_LIST.forEach(d => {
+      const maxP = c.segment === 'F' ? 4 : 6;
+      for (let p = 0; p <= maxP; p++) {
+        const vList = classSlotVars[c.id][d][p];
+        if (c.segment === 'F' && p <= 4) {
+          if (vList.length > 0) {
+            subjectTo.push({
+              name: `f_exact1_${c.id}_${d}_${p}`,
+              bnds: { type: 3 /* GLP_UP */, ub: 1, lb: 0 },
+              vars: vList.map(v => ({ name: v, coef: 1 }))
+            });
+          }
+        } else {
+          if (vList.length > 1) {
+            subjectTo.push({
+              name: `c_coll_${c.id}_${d}_${p}`,
+              bnds: { type: 3 /* GLP_UP */, ub: 1, lb: 0 },
+              vars: vList.map(v => ({ name: v, coef: 1 }))
+            });
+          }
+        }
+      }
+
+      if (c.segment === 'M') {
+        const latePeriodsVars = [];
+        for (let p = 4; p <= 6; p++) {
+          classSlotVars[c.id][d][p].forEach(v => latePeriodsVars.push(v));
+        }
+        if (latePeriodsVars.length > 0) {
+          subjectTo.push({
+            name: `m_min1155_${c.id}_${d}`,
+            bnds: { type: 2 /* GLP_LO */, lb: 1, ub: 99 },
+            vars: latePeriodsVars.map(v => ({ name: v, coef: 1 }))
+          });
+        }
+      }
+    });
+  });
+
+  return {
+    name: 'FORTEC_MILP_SOLVER',
+    objective: { direction: 2 /* GLP_MAX */, name: 'max_lessons', vars: objVars },
+    subjectTo: subjectTo,
+    binaries: binaries
+  };
+}
+
+function solveGLPKWorker(onProgress) {
+  return new Promise((resolve, reject) => {
+    const workerCode = `
+      importScripts('https://cdn.jsdelivr.net/npm/glpk.js@4.0.2/dist/glpk.min.js');
+      self.onmessage = async function(e) {
+        try {
+          const { model, units } = e.data;
+          const glpkFactory = typeof GLPK === 'function' ? GLPK : (self.GLPK ? self.GLPK : null);
+          if (!glpkFactory) {
+            self.postMessage({ error: 'GLPK.js não foi carregado na Worker.' });
+            return;
+          }
+          const glpk = await glpkFactory();
+          self.postMessage({ status: 'SOLVING', msg: 'Iniciando otimização MILP (Simplex / Branch & Bound)...' });
+          const opt = { msglev: glpk.GLP_MSG_OFF };
+          const result = await glpk.solve(model, opt);
+          self.postMessage({ status: 'DONE', result: result, units: units });
+        } catch(err) {
+          self.postMessage({ error: err.message || String(err) });
+        }
+      };
+    `;
+
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const workerUrl = URL.createObjectURL(blob);
+    const worker = new Worker(workerUrl);
+
+    const model = buildGLPKModel(db);
+    const units = buildNeedUnits();
+
+    worker.onmessage = function(e) {
+      const data = e.data;
+      if (data.error) {
+        URL.revokeObjectURL(workerUrl);
+        worker.terminate();
+        reject(new Error(data.error));
+        return;
+      }
+
+      if (data.status === 'PROGRESS' || data.status === 'SOLVING') {
+        if (onProgress) onProgress(data);
+        return;
+      }
+
+      if (data.status === 'DONE') {
+        URL.revokeObjectURL(workerUrl);
+        worker.terminate();
+
+        const vars = data.result && data.result.result && data.result.result.vars ? data.result.result.vars : {};
+        const lessons = [];
+        const DAYS_LIST = ['SEG', 'TER', 'QUA', 'QUI', 'SEX'];
+
+        units.forEach((u, uIdx) => {
+          const maxP = u.segment === 'F' ? 4 : 6;
+          DAYS_LIST.forEach(d => {
+            for (let p = 0; p <= maxP; p++) {
+              const varName = `x_${uIdx}_${d}_${p}`;
+              if (vars[varName] === 1) {
+                lessons.push({
+                  id: uid('lsn'),
+                  day: d,
+                  period: p,
+                  segment: u.segment,
+                  teacherId: u.teacherId,
+                  subjectId: u.subjectId,
+                  classIds: [...u.classIds],
+                  requirementId: u.reqId
+                });
+              }
+            }
+          });
+        });
+
+        resolve({
+          lessons: lessons,
+          unplaced: units.length - lessons.length,
+          complete: lessons.length > 0,
+          solverResult: data.result
+        });
+      }
+    };
+
+    worker.onerror = function(err) {
+      URL.revokeObjectURL(workerUrl);
+      worker.terminate();
+      reject(err);
+    };
+
+    worker.postMessage({ model: model, units: units });
+  });
 }
 
 function generateSchedule(forceRegen = false){
