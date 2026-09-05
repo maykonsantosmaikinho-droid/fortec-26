@@ -951,7 +951,7 @@ function solveGLPKWorker(onProgress) {
   });
 }
 
-function generateSchedule(forceRegen = false){
+async function generateSchedule(forceRegen = false){
   if (!forceRegen && typeof EMBEDDED_DB !== 'undefined' && EMBEDDED_DB.schedule && EMBEDDED_DB.schedule.lessons) {
     const baseLessons = JSON.parse(JSON.stringify(EMBEDDED_DB.schedule.lessons));
     autoCompactGaps(baseLessons);
