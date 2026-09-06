@@ -1001,30 +1001,110 @@ async function generateSchedule(forceRegen = false){
 
 // TRAVA AUTOMÁTICA ANTI-JANELA: compacto aulas de cada turma para que fiquem 100% contínuas
 function autoCompactGaps(lessonsList) {
-  if (!lessonsList) return lessonsList;
-  db.classes.forEach(cls => {
-    const maxP = cls.segment === 'F' ? 4 : 6;
-    DAYS.forEach(day => {
-      const classDayLessons = lessonsList.filter(l => l.classIds.includes(cls.id) && l.day === day).sort((a,b) => a.period - b.period);
-      if (classDayLessons.length === 0) return;
-      const firstP = cls.segment === 'F' ? 0 : classDayLessons[0].period;
-      classDayLessons.forEach((l, idx) => {
-        const targetP = Math.min(firstP + idx, maxP);
-        l.segment = cls.segment;
-        if (l.period !== targetP) {
-          // Verifica se o professor está livre no novo período
-          const tConflict = lessonsList.some(other => other.id !== l.id && other.teacherId === l.teacherId && other.day === day && other.period === targetP);
-          if (!tConflict) {
-            l.period = targetP;
-          }
+  if (!lessonsList || !db || !db.classes) return lessonsList;
+  
+  const SEGS_JS = {
+    'F': [{'start':'07:30','end':'08:20'},{'start':'08:20','end':'09:10'},{'start':'09:25','end':'10:15'},{'start':'10:15','end':'11:05'},{'start':'11:05','end':'11:55'},{'start':'11:55','end':'12:45'},{'start':'12:45','end':'13:35'}],
+    'M': [{'start':'07:30','end':'08:20'},{'start':'08:20','end':'09:10'},{'start':'09:10','end':'10:00'},{'start':'10:15','end':'11:05'},{'start':'11:05','end':'11:55'},{'start':'11:55','end':'12:45'},{'start':'12:45','end':'13:35'}]
+  };
+
+  function toMinJS(hhmm) {
+    if (!hhmm) return 0;
+    const parts = hhmm.split(':');
+    return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+  }
+
+  function teacherConflictJS(tId, day, pIdx, lId, seg) {
+    const p1 = SEGS_JS[seg] ? SEGS_JS[seg][pIdx] : SEGS_JS['M'][pIdx];
+    if (!p1) return false;
+    return lessonsList.some(other => {
+      if (other.id === lId || other.day !== day || other.teacherId !== tId) return false;
+      const oSeg = other.segment || (db.classes.find(c => other.classIds.includes(c.id)) || {}).segment || 'M';
+      const p2 = SEGS_JS[oSeg] ? SEGS_JS[oSeg][other.period] : SEGS_JS['M'][other.period];
+      if (!p2) return false;
+      const s1 = toMinJS(p1.start), e1 = toMinJS(p1.end);
+      const s2 = toMinJS(p2.start), e2 = toMinJS(p2.end);
+      return Math.max(s1, s2) < Math.min(e1, e2);
+    });
+  }
+
+  function classConflictJS(cIds, day, pIdx, lId) {
+    return lessonsList.some(other => {
+      if (other.id === lId || other.day !== day || other.period !== pIdx) return false;
+      return cIds.some(cid => other.classIds.includes(cid));
+    });
+  }
+
+  function getGapsJS(lsns) {
+    const gaps = [];
+    db.classes.forEach(cls => {
+      DAYS.forEach(day => {
+        const cLsns = lsns.filter(l => l.classIds.includes(cls.id) && l.day === day).sort((a,b) => a.period - b.period);
+        if (cLsns.length <= 1) return;
+        const idxs = cLsns.map(l => l.period);
+        const first = Math.min(...idxs);
+        const last = Math.max(...idxs);
+        for (let p = first; p <= last; p++) {
+          if (!idxs.includes(p)) gaps.push({ cid: cls.id, day, period: p });
         }
       });
     });
-  });
+    return gaps;
+  }
+
+  for (let pass = 0; pass < 150; pass++) {
+    const gaps = getGapsJS(lessonsList);
+    if (gaps.length === 0) break;
+
+    let movedAny = false;
+    for (let g of gaps) {
+      const cls = db.classes.find(c => c.id === g.cid);
+      const seg = cls ? cls.segment : 'M';
+      const cLsns = lessonsList.filter(l => l.classIds.includes(g.cid));
+
+      for (let l1 of cLsns) {
+        if (l1.day === g.day && l1.period === g.period) continue;
+        const d1Old = l1.day, p1Old = l1.period;
+
+        if (!teacherConflictJS(l1.teacherId, g.day, g.period, l1.id, seg) &&
+            !classConflictJS(l1.classIds, g.day, g.period, l1.id)) {
+          l1.day = g.day; l1.period = g.period;
+          if (getGapsJS(lessonsList).length < gaps.length) {
+            movedAny = true; break;
+          } else {
+            l1.day = d1Old; l1.period = p1Old;
+          }
+        }
+
+        const sameSlotOthers = lessonsList.filter(o => o.day === g.day && o.period === g.period);
+        for (let l2 of sameSlotOthers) {
+          const seg2 = l2.segment || (db.classes.find(c => l2.classIds.includes(c.id)) || {}).segment || 'M';
+          l1.day = g.day; l1.period = g.period;
+          l2.day = d1Old; l2.period = p1Old;
+
+          const c1 = teacherConflictJS(l1.teacherId, g.day, g.period, l1.id, seg) || classConflictJS(l1.classIds, g.day, g.period, l1.id);
+          const c2 = teacherConflictJS(l2.teacherId, d1Old, p1Old, l2.id, seg2) || classConflictJS(l2.classIds, d1Old, p1Old, l2.id);
+
+          if (!c1 && !c2 && getGapsJS(lessonsList).length < gaps.length) {
+            movedAny = true; break;
+          } else {
+            l1.day = d1Old; l1.period = p1Old;
+            l2.day = g.day; l2.period = g.period;
+          }
+        }
+        if (movedAny) break;
+      }
+      if (movedAny) break;
+    }
+    if (!movedAny) break;
+  }
+
   return lessonsList;
 }
 
 function auditSchedule(lessons){
+  if (lessons) { autoCompactGaps(lessons); }
+
   const hardViolations=[]; const deficits=[]; let softScore=0;
 
   // necessidade x programado (Correspondência Estrita de Requisitos)
