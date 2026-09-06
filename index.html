@@ -2322,10 +2322,12 @@ function copyIndividualTeacherLink(teacherId){
       Cole sua chave acima para me ativar e me perguntar <b>qualquer coisa</b> sobre o horário!
     </div>
   </div>
-  <div class="ai-chips" id="aiChips">
-    <button class="ai-chip" onclick="sendAiQuick('Gerar o horário da escola')">⚡ Gerar horário</button>
-    <button class="ai-chip" onclick="sendAiQuick('Baixar planilha Excel')">⬇ Excel</button>
-    <button class="ai-chip" onclick="sendAiQuick('Verificar se há conflitos ou erros no horário')">🔍 Auditar</button>
+  <div class="ai-chips" id="aiChips" style="display:flex;gap:4px;overflow-x:auto;padding:6px 10px;background:#152238">
+    <button class="ai-chip" onclick="startGuidedWizard('cadastrar_professor')">👤 + Professor Guiado</button>
+    <button class="ai-chip" onclick="startGuidedWizard('alterar_disponibilidade')">📅 Ajustar Disponibilidade</button>
+    <button class="ai-chip" onclick="startGuidedWizard('cadastrar_turma')">🏫 + Cadastrar Turma</button>
+    <button class="ai-chip" onclick="sendAiQuick('Gerar o horário da escola com HiGHS')">⚡ Gerar Horário</button>
+    <button class="ai-chip" onclick="sendAiQuick('Auditar horário da escola')">🔍 Auditar</button>
     <button class="ai-chip" onclick="sendAiQuick('Resumo estatístico da escola')">📊 Resumo</button>
   </div>
   <div class="ai-input-area">
@@ -2406,6 +2408,21 @@ function addAiMessage(html, isUser=false){
   return msg;
 }
 
+
+function startGuidedWizard(action){
+  switch(action){
+    case 'cadastrar_professor':
+      sendAiQuick('Quero cadastrar um novo professor de forma guiada passo a passo.');
+      break;
+    case 'alterar_disponibilidade':
+      sendAiQuick('Quero alterar a disponibilidade de um professor de forma guiada.');
+      break;
+    case 'cadastrar_turma':
+      sendAiQuick('Quero cadastrar uma nova turma de forma guiada.');
+      break;
+  }
+}
+
 function sendAiQuick(text){
   const inp = document.getElementById('aiInput');
   if(inp) inp.value = text;
@@ -2428,7 +2445,7 @@ function sendAiMsg(){
 // ---- FERRAMENTAS DO FORTEC PARA O GEMINI ----
 const FORTEC_TOOLS = [{
   functionDeclarations: [
-    { name:'gerar_horario', description:'Gera ou recalcula o horário completo da escola usando backtracking inteligente.', parameters:{type:'OBJECT',properties:{}} },
+    { name:'gerar_horario', description:'Gera ou recalcula o horário completo da escola usando o otimizador MILP HiGHS WASM.', parameters:{type:'OBJECT',properties:{}} },
     { name:'baixar_excel', description:'Exporta e faz download da planilha Excel com o horário.', parameters:{type:'OBJECT',properties:{}} },
     { name:'auditar_horario', description:'Audita o horário verificando conflitos, janelas e violações.', parameters:{type:'OBJECT',properties:{}} },
     { name:'ver_horario_professor', description:'Mostra o horário de um professor na tela.',
@@ -2439,6 +2456,52 @@ const FORTEC_TOOLS = [{
     { name:'consultar_dados', description:'Retorna dados reais da escola: professores, turmas, disciplinas, requisitos, estatísticas.', parameters:{type:'OBJECT',properties:{}} },
     { name:'ir_aba', description:'Navega para uma aba: turmas, disciplinas, professores, gerar, horario, auditoria, backup.',
       parameters:{type:'OBJECT', properties:{ aba:{type:'STRING',description:'nome da aba'} }, required:['aba']} },
+    { name:'cadastrar_professor',
+      description:'Cadastra um novo professor no sistema com seu nome e disponibilidade opcional.',
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          nome:{type:'STRING',description:'Nome completo do professor(a)'},
+          dias:{type:'ARRAY',items:{type:'STRING'},description:'Opcional. Dias disponíveis: SEG, TER, QUA, QUI, SEX'}
+        },
+        required:['nome']
+      }
+    },
+    { name:'cadastrar_turma',
+      description:'Cadastra uma nova turma no sistema.',
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          nome:{type:'STRING',description:'Nome da turma, ex: 6º ANO B, 1º ANO MEDIO'},
+          segmento:{type:'STRING',description:'Segmento da turma: F para Fundamental, M para Médio/Técnico'}
+        },
+        required:['nome','segmento']
+      }
+    },
+    { name:'cadastrar_disciplina',
+      description:'Cadastra uma nova disciplina no sistema.',
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          nome:{type:'STRING',description:'Nome da disciplina, ex: ROBÓTICA, FÍSICA APLICADA'}
+        },
+        required:['nome']
+      }
+    },
+    { name:'vincular_disciplina_professor',
+      description:'Vincula uma disciplina e turmas a um professor com sua carga horária semanal.',
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          nome_professor:{type:'STRING',description:'Nome do professor'},
+          nome_disciplina:{type:'STRING',description:'Nome da disciplina'},
+          turmas:{type:'ARRAY',items:{type:'STRING'},description:'Nomes das turmas a vincular'},
+          aulas_por_semana:{type:'NUMBER',description:'Quantidade de aulas por semana'},
+          conjunta:{type:'BOOLEAN',description:'Se as turmas têm aula juntas no mesmo horário (turma conjunta)'}
+        },
+        required:['nome_professor','nome_disciplina','turmas','aulas_por_semana']
+      }
+    },
     { name:'alterar_disponibilidade_professor',
       description:'Altera a disponibilidade de um professor por dias e/ou por períodos de aulas (ex: "a partir da 3ª aula", "das 09:10 em diante", "só na 1ª e 2ª aula"). SEGURANÇA: Passe confirmado=false se o usuário ainda não confirmou no chat. Passe confirmado=true apenas após confirmação.',
       parameters:{
@@ -2446,7 +2509,7 @@ const FORTEC_TOOLS = [{
         properties:{
           nome_professor:{type:'STRING',description:'Nome do professor, ex: SIMONI, WILRANI'},
           dias:{type:'ARRAY',items:{type:'STRING'},description:'Dias em que o professor PODE dar aula. Códigos: SEG, TER, QUA, QUI, SEX'},
-          aulas:{type:'ARRAY',items:{type:'NUMBER'},description:'Opcional. Números das aulas permitidas de 1 a 7 (ex: [3,4,5,6,7] para "a partir da 3ª aula" ou [1,2,3] para "da 1ª à 3ª aula"). Se omitido, considera todas as aulas (1 a 7).'},
+          aulas:{type:'ARRAY',items:{type:'NUMBER'},description:'Opcional. Números das aulas permitidas de 1 a 7 (ex: [3,4,5,6,7] para "a partir da 3ª aula").'},
           confirmado:{type:'BOOLEAN',description:'true se o usuário confirmou a alteração no chat; false se pendente.'}
         },
         required:['nome_professor','dias','confirmado']
@@ -2555,6 +2618,91 @@ INSTRUÇÕES OBRIGATÓRIAS PARA O ASSISTENTE IA:
       render();
 
       return `SUCESSO! A disponibilidade do(a) professor(a) ${t.name} foi alterada para: ${diasDesc}. O horário da escola foi recalculado e auditado automaticamente e a grade está sendo exibida na tela!`;
+    }
+    case 'cadastrar_professor': {
+      const nomeClean = args.nome.trim();
+      const existing = db.teachers.find(t => normStr(t.name) === normStr(nomeClean));
+      if(existing) return `O(A) professor(a) "${existing.name}" já está cadastrado(a) no sistema.`;
+      
+      const newId = uid('tch');
+      const validDays = Array.isArray(args.dias) && args.dias.length > 0 ? args.dias : ['SEG','TER','QUA','QUI','SEX'];
+      const defaultAvail = validDays.map(d => ({ day: d, periods: [0,1,2,3,4,5,6] }));
+      
+      db.teachers.push({ id: newId, name: nomeClean, availability: defaultAvail });
+      scheduleSave();
+      state.adminTab = 'professores';
+      render();
+      return `SUCESSO! O(A) professor(a) "${nomeClean}" foi cadastrado(a) com sucesso! NAVEGANDO PARA A ABA PROFESSORES.`;
+    }
+    case 'cadastrar_turma': {
+      const nomeClean = args.nome.trim();
+      const segClean = (args.segmento || 'F').toUpperCase() === 'M' ? 'M' : 'F';
+      const existing = db.classes.find(c => normStr(c.name) === normStr(nomeClean));
+      if(existing) return `A turma "${existing.name}" já está cadastrada no sistema.`;
+      
+      const newId = uid('cls');
+      db.classes.push({ id: newId, name: nomeClean, segment: segClean });
+      scheduleSave();
+      state.adminTab = 'turmas';
+      render();
+      return `SUCESSO! A turma "${nomeClean}" (${segClean === 'F' ? 'Fundamental' : 'Médio/Técnico'}) foi cadastrada com sucesso!`;
+    }
+    case 'cadastrar_disciplina': {
+      const nomeClean = args.nome.trim();
+      const existing = db.subjects.find(s => normStr(s.name) === normStr(nomeClean));
+      if(existing) return `A disciplina "${existing.name}" já está cadastrada no sistema.`;
+      
+      const newId = uid('subj');
+      db.subjects.push({ id: newId, name: nomeClean });
+      scheduleSave();
+      state.adminTab = 'disciplinas';
+      render();
+      return `SUCESSO! A disciplina "${nomeClean}" foi cadastrada com sucesso!`;
+    }
+    case 'vincular_disciplina_professor': {
+      const pNorm = normStr(args.nome_professor);
+      const t = db.teachers.find(t => normStr(t.name).includes(pNorm));
+      if(!t) return `Professor(a) "${args.nome_professor}" não encontrado(a).`;
+      
+      const dNorm = normStr(args.nome_disciplina);
+      let subj = db.subjects.find(s => normStr(s.name).includes(dNorm));
+      if(!subj){
+        const newId = uid('subj');
+        subj = { id: newId, name: args.nome_disciplina.toUpperCase() };
+        db.subjects.push(subj);
+      }
+      
+      const targetClassIds = [];
+      (args.turmas || []).forEach(tName => {
+        const cMatch = db.classes.find(c => normStr(c.name).includes(normStr(tName)));
+        if(cMatch && !targetClassIds.includes(cMatch.id)) targetClassIds.push(cMatch.id);
+      });
+      
+      if(targetClassIds.length === 0) return `Nenhuma turma válida encontrada a partir dos nomes informados: ${args.turmas.join(', ')}.`;
+      
+      const seg = db.classes.find(c => targetClassIds.includes(c.id))?.segment || 'F';
+      const reqId = uid('req');
+      
+      const classLoadsMap = {};
+      targetClassIds.forEach(cid => { classLoadsMap[cid] = args.aulas_por_semana; });
+      
+      db.requirements.push({
+        id: reqId,
+        teacherId: t.id,
+        subjectId: subj.id,
+        segment: seg,
+        classIds: targetClassIds,
+        lessonsPerWeek: args.aulas_por_semana,
+        joint: !!args.conjunta,
+        positionRule: 'none',
+        availability: t.availability || [],
+        classLoads: classLoadsMap
+      });
+      
+      scheduleSave();
+      state.adminTab = 'professores';
+      render();
+      return `SUCESSO! A disciplina ${subj.name} (${args.aulas_por_semana} aulas/semana) foi vinculada ao(à) professor(a) ${t.name} para a(s) turma(s): ${args.turmas.join(', ')}.`;
     }
     default: return 'ok';
   }
