@@ -1027,18 +1027,18 @@ function autoCompactGaps(lessonsList) {
 function auditSchedule(lessons){
   const hardViolations=[]; const deficits=[]; let softScore=0;
 
-  // necessidade x programado
-  db.requirements.forEach(req=>{
-    if(req.joint){
-      const have = lessons.filter(l => l.requirementId === req.id).length;
-      if(have<req.lessonsPerWeek) deficits.push(`${subjectName(req.subjectId)} (conjunta ${req.classIds.map(className).join('+')}) — necessário ${req.lessonsPerWeek}, programado ${have}`);
-      if(have>req.lessonsPerWeek) hardViolations.push(`${subjectName(req.subjectId)} (conjunta ${req.classIds.map(className).join('+')}) recebeu mais aulas que a carga cadastrada (${have}/${req.lessonsPerWeek})`);
+  // necessidade x programado (Correspondência Estrita de Requisitos)
+  db.requirements.forEach(req => {
+    if (req.joint) {
+      const have = lessons.filter(l => l.requirementId === req.id || (!l.requirementId && l.teacherId === req.teacherId && l.subjectId === req.subjectId && l.classIds.length === req.classIds.length && req.classIds.every(c => l.classIds.includes(c)))).length;
+      if (have < req.lessonsPerWeek) deficits.push(`${subjectName(req.subjectId)} (conjunta ${req.classIds.map(className).join('+')}) — necessário ${req.lessonsPerWeek}, programado ${have}`);
+      if (have > req.lessonsPerWeek) hardViolations.push(`${subjectName(req.subjectId)} (conjunta ${req.classIds.map(className).join('+')}) recebeu mais aulas que a carga cadastrada (${have}/${req.lessonsPerWeek})`);
     } else {
-      req.classIds.forEach(cid=>{
+      req.classIds.forEach(cid => {
         const need = loadFor(req, cid);
-        const have = lessons.filter(l => l.requirementId === req.id && l.classIds.includes(cid)).length;
-        if(have<need) deficits.push(`${className(cid)} — ${subjectName(req.subjectId)} — necessário ${need}, programado ${have}`);
-        if(have>need) hardViolations.push(`${className(cid)} — ${subjectName(req.subjectId)} recebeu mais aulas que a carga cadastrada (${have}/${need})`);
+        const have = lessons.filter(l => l.requirementId === req.id || (!l.requirementId && l.teacherId === req.teacherId && l.subjectId === req.subjectId && l.classIds.length === 1 && l.classIds.includes(cid))).length;
+        if (have < need) deficits.push(`${className(cid)} — ${subjectName(req.subjectId)} — necessário ${need}, programado ${have}`);
+        if (have > need) hardViolations.push(`${className(cid)} — ${subjectName(req.subjectId)} recebeu mais aulas que a carga cadastrada (${have}/${need})`);
       });
     }
   });
