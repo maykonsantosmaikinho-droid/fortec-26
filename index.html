@@ -730,7 +730,7 @@ units.forEach(u=>u._placed=null);
   return {lessons, unplaced, complete: result===true};
 }
 
-/* ---------------- OTIMIZADOR HiGHS MILP WASM (WEB WORKER) ---------------- */
+/* ---------------- OTIMIZADOR HiGHS MILP WASM (ZERO JANELAS) ---------------- */
 
 function buildHiGHSLPString(dbData) {
   const DAYS_LIST = ['SEG', 'TER', 'QUA', 'QUI', 'SEX'];
@@ -772,8 +772,8 @@ function buildHiGHSLPString(dbData) {
 
         let weight = 100;
         if (isPC) {
-          if (p === 0 || p === maxP) weight += 20;
-          else weight -= 10;
+          if (p === 0 || p === maxP) weight += 50;
+          else weight -= 20;
         }
 
         objTerms.push(`${weight} ${varName}`);
@@ -796,6 +796,7 @@ function buildHiGHSLPString(dbData) {
     }
   });
 
+  // 1. Choque de Professores (Máximo 1 aula por horário para cada professor)
   let cCount = 0;
   dbData.teachers.forEach(t => {
     DAYS_LIST.forEach(d => {
@@ -809,6 +810,8 @@ function buildHiGHSLPString(dbData) {
     });
   });
 
+  // 2. Turmas (Max 1 aula por horário, Fundamental exatamente 1 por horário 0..4) + ZERO JANELAS
+  let gapCount = 0;
   dbData.classes.forEach(c => {
     DAYS_LIST.forEach(d => {
       const maxP = c.segment === 'F' ? 4 : 6;
@@ -832,6 +835,39 @@ function buildHiGHSLPString(dbData) {
         }
         if (latePeriodsVars.length > 0) {
           subjectTo.push(` m_min1155_${c.id}_${d}: ${latePeriodsVars.join(' + ')} >= 1`);
+        }
+      }
+
+      // CONTIGUIDADE ABSOLUTA (ZERO JANELAS TURMA):
+      // Para qualquer janela de 1 aula entre p e p+2: vP + vP2 - vP1 <= 1
+      for (let p = 0; p <= maxP - 2; p++) {
+        const vP = classSlotVars[c.id][d][p];
+        const vP1 = classSlotVars[c.id][d][p + 1];
+        const vP2 = classSlotVars[c.id][d][p + 2];
+
+        if (vP.length > 0 && vP2.length > 0 && vP1.length > 0) {
+          gapCount++;
+          const strP = vP.join(' + ');
+          const strP2 = vP2.join(' + ');
+          const strP1 = vP1.map(v => `- ${v}`).join(' ');
+          subjectTo.push(` c_nogap1_${c.id}_${d}_${p}_${gapCount}: ${strP} + ${strP2} ${strP1} <= 1`);
+        }
+      }
+
+      // Para qualquer janela de 2 aulas entre p e p+3: vP + vP3 - vP1 - vP2 <= 1
+      for (let p = 0; p <= maxP - 3; p++) {
+        const vP = classSlotVars[c.id][d][p];
+        const vP1 = classSlotVars[c.id][d][p + 1];
+        const vP2 = classSlotVars[c.id][d][p + 2];
+        const vP3 = classSlotVars[c.id][d][p + 3];
+
+        if (vP.length > 0 && vP3.length > 0) {
+          gapCount++;
+          const strP = vP.join(' + ');
+          const strP3 = vP3.join(' + ');
+          const strP1 = vP1.length > 0 ? vP1.map(v => `- ${v}`).join(' ') : '';
+          const strP2 = vP2.length > 0 ? vP2.map(v => `- ${v}`).join(' ') : '';
+          subjectTo.push(` c_nogap2_${c.id}_${d}_${p}_${gapCount}: ${strP} + ${strP3} ${strP1} ${strP2} <= 1`);
         }
       }
     });
